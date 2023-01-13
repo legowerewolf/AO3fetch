@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -29,18 +30,27 @@ func login(username, password string) error {
 	return fmt.Errorf("login failed")
 }
 
-// TokenResponse exported for JSON requests
-type TokenResponse struct {
-	Token string `json:"token"`
-}
-
 func getAo3Token() string {
-	resp, _ := http.Get("https://archiveofourown.org/token_dispenser.json")
-	text, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	var r TokenResponse
-	json.Unmarshal(text, &r)
-	return r.Token
+	resp, apiErr := http.Get("https://archiveofourown.org/token_dispenser.json")
+	if apiErr != nil {
+		log.Fatal(apiErr)
+	}
+	if resp.Body != nil {
+		defer resp.Body.Close()
+	}
+
+	text, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		log.Fatal(readErr)
+	}
+
+	var r map[string]interface{}
+	unmarshallErr := json.Unmarshal(text, &r)
+	if unmarshallErr != nil {
+		log.Fatal(unmarshallErr)
+	}
+
+	return r["token"].(string)
 }
 
 func generateLoginForm(username, password string) url.Values {
