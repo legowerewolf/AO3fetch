@@ -81,12 +81,12 @@ func main() {
 	log.Println("Running at", seedURL.String(), "across", strconv.Itoa(pages), "pages with a", strconv.Itoa(delay), "second delay and series set to", strconv.FormatBool(includeSeries))
 
 	queue := make(chan string, 10*pages)
-	chworks := make(chan string)
-	chseries := make(chan string)
+	returned_works := make(chan string)
+	returned_series := make(chan string)
 	finished := make(chan bool)
 
 	go fill_queue(queue, delay, seedURL, pages)
-	go crawl_queue(queue, delay, chworks, chseries, finished)
+	go crawl_queue(queue, delay, returned_works, returned_series, finished)
 
 	bar := pb.New(pages)
 	if showProgress {
@@ -94,19 +94,19 @@ func main() {
 	}
 
 	//TODO: use empty struct instead of bool
-	foundWorks := make(map[string]bool)
-	foundSeries := make(map[string]bool)
+	works_set := make(map[string]bool)
+	series_set := make(map[string]bool)
 
 	// Get works and series
 	for crawled, addlPages := 0, 0; crawled < pages+addlPages; {
 		select {
-		case url := <-chworks:
-			foundWorks[url] = true
-		case url := <-chseries:
-			if foundSeries[url] || !includeSeries {
+		case url := <-returned_works:
+			works_set[url] = true
+		case url := <-returned_series:
+			if series_set[url] || !includeSeries {
 				continue
 			} else {
-				foundSeries[url] = true
+				series_set[url] = true
 				log.Println("Found series", url)
 				queue <- url
 				addlPages++
@@ -120,8 +120,8 @@ func main() {
 
 	bar.Finish()
 
-	fmt.Println("\nFound", len(foundWorks), "works across", pages, "pages and", len(foundSeries), "series:\n ")
-	for url := range foundWorks {
+	fmt.Println("\nFound", len(works_set), "works across", pages, "pages and", len(series_set), "series:\n ")
+	for url := range works_set {
 		fmt.Println(toFullURL(url))
 	}
 }
@@ -138,14 +138,14 @@ func fill_queue(queue chan string, delay int, seedURL *url.URL, pages int) {
 	log.Println("Filled queue with", pages, "pages")
 }
 
-func crawl_queue(queue chan string, delay int, works chan string, series chan string, finished chan bool) {
+func crawl_queue(queue chan string, delay int, returned_works, returned_series chan string, finished chan bool) {
 	for url := range queue {
-		go crawl(url, works, series, finished)
+		go crawl(url, returned_works, returned_series, finished)
 		time.Sleep(time.Duration(delay) * time.Second)
 	}
 }
 
-func crawl(url string, works chan string, series chan string, finished chan bool) {
+func crawl(url string, returned_works, returned_series chan string, finished chan bool) {
 	defer sendt(finished)
 
 	req, err := http.NewRequest("GET", toFullURL(url), nil)
@@ -183,10 +183,10 @@ func crawl(url string, works chan string, series chan string, finished chan bool
 		isSpecial := isSpecialMatcher.MatchString(href)
 
 		if isWork && !isSpecial {
-			works <- href
+			returned_works <- href
 		}
 		if isSeries && !isSpecial && !isSeriesMatcher.MatchString(url) {
-			series <- href
+			returned_series <- href
 		}
 
 	}
@@ -197,7 +197,6 @@ func getHref(t html.Token) (string, error) {
 	for _, a := range t.Attr {
 		if a.Key == "href" {
 			return a.Val, nil
-
 		}
 	}
 	return "", errors.New("no href attribute found")
