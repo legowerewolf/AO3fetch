@@ -16,6 +16,8 @@ import (
 	"gopkg.in/cheggaaa/pb.v1"
 )
 
+var isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
+
 func main() {
 	var seedURLRaw string
 	var pages int
@@ -25,6 +27,7 @@ func main() {
 	var credentials string
 
 	// parse flags
+
 	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from")
 	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl")
 	flag.BoolVar(&includeSeries, "series", true, "Include series in the crawl")
@@ -68,9 +71,15 @@ func main() {
 		}
 	}
 
+	// Finish initialization
+	isWorkMatcher = regexp.MustCompile(`/works/\d+`)
+	isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
+	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos`)
+
+	// Start processing pages
+
 	log.Println("Running at", seedURL.String(), "across", strconv.Itoa(pages), "pages with a", strconv.Itoa(delay), "second delay and series set to", strconv.FormatBool(includeSeries))
 
-	// Channels
 	queue := make(chan string, 10*pages)
 	chworks := make(chan string)
 	chseries := make(chan string)
@@ -79,12 +88,12 @@ func main() {
 	go fill_queue(queue, delay, seedURL, pages)
 	go crawl_queue(queue, delay, chworks, chseries, finished)
 
-	// Crawl the listing - with pagination
 	bar := pb.New(pages)
 	if showProgress {
 		bar.Start()
 	}
 
+	//TODO: use empty struct instead of bool
 	foundWorks := make(map[string]bool)
 	foundSeries := make(map[string]bool)
 
@@ -136,53 +145,52 @@ func crawl_queue(queue chan string, delay int, works chan string, series chan st
 	}
 }
 
-func crawl(url string, works chan string, series chan string, chFinished chan bool) {
+func crawl(url string, works chan string, series chan string, finished chan bool) {
+	defer sendt(finished)
+
 	req, err := http.NewRequest("GET", toFullURL(url), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 
-	defer func() {
-		chFinished <- true
-	}()
-
 	if err != nil {
-		fmt.Println("ERROR: Failed to crawl \"" + url + "\"")
+		log.Println("ERROR: Failed to crawl \"" + url + "\"")
 		return
 	}
 
 	z := html.NewTokenizer(resp.Body)
 
-	for {
-		tt := z.Next()
-
-		switch {
-		case tt == html.ErrorToken:
-			// End of the document, we're done
-			return
-		case tt == html.StartTagToken:
-			t := z.Token()
-
-			if t.Data != "a" {
-				continue
-			}
-
-			href, err := getHref(t)
-			if err != nil {
-				continue
-			}
-
-			isWork, _ := regexp.MatchString("/works/\\d+", href)
-			isSeries, _ := regexp.MatchString("/series/\\d+", href)
-			isSpecial, _ := regexp.MatchString("bookmarks|comments|collections|search|tags|users|transformative|chapters", href)
-			if isWork && !isSpecial {
-				works <- href
-			}
-			if isSeries && !isSpecial && !strings.Contains(url, "series") {
-				series <- href
-			}
-
+	for tt := z.Next(); tt != html.ErrorToken; tt = z.Next() {
+		if tt != html.StartTagToken {
+			continue
 		}
+
+		t := z.Token()
+
+		if t.Data != "a" {
+			continue
+		}
+
+		href, err := getHref(t)
+		if err != nil {
+			continue
+		}
+
+		isWork := isWorkMatcher.MatchString(href)
+		isSeries := isSeriesMatcher.MatchString(href)
+		isSpecial := isSpecialMatcher.MatchString(href)
+
+		if isWork && !isSpecial {
+			works <- href
+		}
+		if isSeries && !isSpecial && !isSeriesMatcher.MatchString(url) {
+			series <- href
+		}
+
 	}
+
 }
 
 func getHref(t html.Token) (string, error) {
@@ -201,4 +209,8 @@ func toFullURL(url string) string {
 		url = "https://archiveofourown.org" + url
 	}
 	return url
+}
+
+func sendt(c chan bool) {
+	c <- true
 }
