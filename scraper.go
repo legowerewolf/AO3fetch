@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,7 +16,7 @@ import (
 )
 
 func main() {
-	var seedURL string
+	var seedURLRaw string
 	var pages int
 	var includeSeries bool
 	var delay int
@@ -22,7 +24,7 @@ func main() {
 	var credentials string
 
 	// parse flags
-	flag.StringVar(&seedURL, "url", "", "URL to start crawling from")
+	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from")
 	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl")
 	flag.BoolVar(&includeSeries, "series", true, "Include series in the crawl")
 	flag.IntVar(&delay, "delay", 10, "Delay between requests")
@@ -31,16 +33,38 @@ func main() {
 
 	flag.Parse()
 
-	token := ""
-	if credentials != "" {
-		s := strings.Split(credentials, ":")
-		token = login(s[0], s[1])
+	// Check parameters
+
+	var seedURL *url.URL
+	if seedURLRaw == "" {
+		log.Fatal("No URL provided")
+	} else {
+		var err error
+		seedURL, err = url.Parse(seedURLRaw)
+		if err != nil {
+			log.Fatal("Invalid URL provided")
+		}
 	}
 
-	fmt.Println("Running at", seedURL, "across", strconv.Itoa(pages), "pages with a", strconv.Itoa(delay), "second delay and series set to", strconv.FormatBool(includeSeries))
+	if pages < 1 {
+		log.Fatal("Number of pages must be greater than 0")
+	}
 
-	foundWorks := make(map[string]bool)
-	foundSeries := make(map[string]bool)
+	if delay < 0 {
+		log.Fatal("Delay must be greater than or equal to 0")
+	} else if delay < 10 {
+		log.Println("Warning: Delay is less than 10 seconds. This may cause your IP to be blocked by the server.")
+	}
+
+	if credentials != "" {
+		s := strings.Split(credentials, ":")
+		err := login(s[0], s[1])
+		if err != nil {
+			log.Fatal("Authentication failure. Check your credentials and try again.")
+		}
+	}
+
+	log.Println("Running at", seedURL.String(), "across", strconv.Itoa(pages), "pages with a", strconv.Itoa(delay), "second delay and series set to", strconv.FormatBool(includeSeries))
 
 	// Channels
 	chworks := make(chan string)
@@ -53,7 +77,12 @@ func main() {
 		bar = pb.StartNew(pages)
 	}
 	for page := 1; page <= pages; page++ {
-		go crawl(seedURL+"?page="+strconv.Itoa(page), token, chworks, chseries, finished)
+
+		query := seedURL.Query()
+		query.Set("page", strconv.Itoa(page))
+		seedURL.RawQuery = query.Encode()
+
+		go crawl(seedURL.String(), chworks, chseries, finished)
 		if showProgress {
 			bar.Increment()
 		}
@@ -64,6 +93,10 @@ func main() {
 	if showProgress {
 		bar.FinishPrint("Waiting for requests to return...")
 	}
+
+	foundWorks := make(map[string]bool)
+	foundSeries := make(map[string]bool)
+
 	// Get works and series
 	for c, d := 0, 0; c < pages+d; {
 		select {
@@ -74,7 +107,7 @@ func main() {
 				continue
 			} else {
 				foundSeries[url] = true
-				go crawl(url, token, chworks, chseries, finished)
+				go crawl(url, chworks, chseries, finished)
 				d++
 			}
 		case <-finished:
@@ -98,11 +131,9 @@ func getHref(t html.Token) (ok bool, href string) {
 	return
 }
 
-func crawl(url, token string, works chan string, series chan string, chFinished chan bool) {
+func crawl(url string, works chan string, series chan string, chFinished chan bool) {
 	req, err := http.NewRequest("GET", toFullURL(url), nil)
-	if token != "" && token != "error" {
-		req.AddCookie(&http.Cookie{Name: "user_credentials", Value: "39468c3a580f3a6540b15e845146ed6ceb738fae4ac4acaf8aa92d781588e326fb406687c3ffaea52efde4bafca46c7c6b4e6d2a824ad58b43a3932c3db50a2f%3A%3A796379"})
-	}
+
 	resp, err := http.DefaultClient.Do(req)
 
 	defer func() {

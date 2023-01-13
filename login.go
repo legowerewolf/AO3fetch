@@ -3,53 +3,52 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 )
 
-func login(username, password string) string {
-	c := http.Client{}
-	c.Jar, _ = cookiejar.New(nil)
+func login(username, password string) error {
 
-	ao3url, _ := url.Parse("https://archiveofourown.org/user_sessions")
+	http.DefaultClient.Jar, _ = cookiejar.New(nil)
 
-	_, err := c.PostForm(ao3url.String(), generateLoginForm(username, password, c))
+	ao3url, _ := url.Parse("https://archiveofourown.org/users/login")
+
+	_, err := http.PostForm(ao3url.String(), generateLoginForm(username, password))
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	for _, cookie := range c.Jar.Cookies(ao3url) {
+	for _, cookie := range http.DefaultClient.Jar.Cookies(ao3url) {
 		if cookie.Name == "user_credentials" {
-			return cookie.Value
+			return nil
 		}
 	}
 
-	return "error"
+	return fmt.Errorf("login failed")
 }
 
-//TokenResponse exported for JSON requests
+// TokenResponse exported for JSON requests
 type TokenResponse struct {
 	Token string `json:"token"`
 }
 
-func getAo3Token(c http.Client) string {
-	resp, _ := c.Get("https://archiveofourown.org/token_dispenser.json")
-	text, _ := ioutil.ReadAll(resp.Body)
+func getAo3Token() string {
+	resp, _ := http.Get("https://archiveofourown.org/token_dispenser.json")
+	text, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	var r TokenResponse
 	json.Unmarshal(text, &r)
 	return r.Token
 }
 
-func generateLoginForm(username, password string, c http.Client) url.Values {
+func generateLoginForm(username, password string) url.Values {
 	val := url.Values{}
 	val.Set("utf8", "✓")
-	val.Set("authenticity_token", getAo3Token(c))
-	val.Set("[user_session]login", username)
-	val.Set("[user_session]password", password)
-	val.Set("user_session[remember_me]", "0")
+	val.Set("authenticity_token", getAo3Token())
+	val.Set("[user]login", username)
+	val.Set("[user]password", password)
 	val.Set("commit", "Log In")
 
 	return val
