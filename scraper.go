@@ -57,8 +57,11 @@ func main() {
 	}
 
 	if credentials != "" {
-		s := strings.Split(credentials, ":")
-		err := login(s[0], s[1])
+		username, pass, _ := strings.Cut(credentials, ":")
+
+		log.Println("Logging in as " + username + "...")
+
+		err := login(username, pass)
 		if err != nil {
 			log.Fatal("Authentication failure. Check your credentials and try again.")
 		}
