@@ -75,10 +75,11 @@ func main() {
 	finished := make(chan bool)
 
 	// Crawl the listing - with pagination
-	var bar *pb.ProgressBar
+	bar := pb.New(pages)
 	if showProgress {
-		bar = pb.StartNew(pages)
+		bar.Start()
 	}
+
 	for page := 1; page <= pages; page++ {
 
 		query := seedURL.Query()
@@ -86,22 +87,17 @@ func main() {
 		seedURL.RawQuery = query.Encode()
 
 		go crawl(seedURL.String(), chworks, chseries, finished)
-		if showProgress {
-			bar.Increment()
-		}
+
 		if page < pages {
 			time.Sleep(time.Duration(delay) * time.Second)
 		}
-	}
-	if showProgress {
-		bar.FinishPrint("Waiting for requests to return...")
 	}
 
 	foundWorks := make(map[string]bool)
 	foundSeries := make(map[string]bool)
 
 	// Get works and series
-	for c, d := 0, 0; c < pages+d; {
+	for crawled, addlPages := 0, 0; crawled < pages+addlPages; {
 		select {
 		case url := <-chworks:
 			foundWorks[url] = true
@@ -111,27 +107,21 @@ func main() {
 			} else {
 				foundSeries[url] = true
 				go crawl(url, chworks, chseries, finished)
-				d++
+				addlPages++
+				bar.SetTotal(pages + addlPages)
 			}
 		case <-finished:
-			c++
+			crawled++
+			bar.Increment()
 		}
 	}
+
+	bar.FinishPrint("Finished crawling!")
 
 	fmt.Println("\nFound", len(foundWorks), "works across", pages, "pages and", len(foundSeries), "series:\n ")
 	for url := range foundWorks {
 		fmt.Println(toFullURL(url))
 	}
-}
-
-func getHref(t html.Token) (ok bool, href string) {
-	for _, a := range t.Attr {
-		if a.Key == "href" {
-			href = a.Val
-			ok = true
-		}
-	}
-	return
 }
 
 func crawl(url string, works chan string, series chan string, chFinished chan bool) {
@@ -181,6 +171,16 @@ func crawl(url string, works chan string, series chan string, chFinished chan bo
 
 		}
 	}
+}
+
+func getHref(t html.Token) (ok bool, href string) {
+	for _, a := range t.Attr {
+		if a.Key == "href" {
+			href = a.Val
+			ok = true
+		}
+	}
+	return
 }
 
 func toFullURL(url string) string {
