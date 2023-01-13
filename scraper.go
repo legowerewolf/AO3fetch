@@ -1,9 +1,9 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,44 +14,33 @@ import (
 )
 
 func main() {
-	foundWorks := make(map[string]bool)
-	foundSeries := make(map[string]bool)
+	var seedURL string
+	var pages int
+	var includeSeries bool
+	var delay int
+	var showProgress bool
+	var credentials string
 
-	seedURL := os.Args[1]
-	pages := 1
-	includeSeries := true
-	delay := 10
-	showProgress := true
+	// parse flags
+	flag.StringVar(&seedURL, "url", "", "URL to start crawling from")
+	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl")
+	flag.BoolVar(&includeSeries, "series", true, "Include series in the crawl")
+	flag.IntVar(&delay, "delay", 10, "Delay between requests")
+	flag.BoolVar(&showProgress, "progress", true, "Show progress bar")
+	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password")
+
+	flag.Parse()
+
 	token := ""
-
-	for index, arg := range os.Args {
-		if index == 0 {
-			continue
-		} else if arg == "-url" && len(os.Args) >= 1+index {
-			seedURL = os.Args[index+1]
-		} else if arg == "-pages" && len(os.Args) >= 1+index {
-			var err error
-			pages, err = strconv.Atoi(os.Args[1+index])
-			if err != nil {
-				pages = 1
-			}
-		} else if arg == "-delay" && len(os.Args) >= 1+index {
-			var err error
-			delay, err = strconv.Atoi(os.Args[1+index])
-			if err != nil {
-				delay = 10
-			}
-		} else if arg == "-noseries" {
-			includeSeries = false
-		} else if arg == "-noprogress" {
-			showProgress = false
-		} else if arg == "-login" {
-			s := strings.Split(os.Args[1+index], ":")
-			token = login(s[0], s[1])
-		}
+	if credentials != "" {
+		s := strings.Split(credentials, ":")
+		token = login(s[0], s[1])
 	}
 
 	fmt.Println("Running at", seedURL, "across", strconv.Itoa(pages), "pages with a", strconv.Itoa(delay), "second delay and series set to", strconv.FormatBool(includeSeries))
+
+	foundWorks := make(map[string]bool)
+	foundSeries := make(map[string]bool)
 
 	// Channels
 	chworks := make(chan string)
