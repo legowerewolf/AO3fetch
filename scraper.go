@@ -202,12 +202,16 @@ func getHref(t html.Token) (string, error) {
 	return "", errors.New("no href attribute found")
 }
 
-func toFullURL(url string) string {
-	isFullURL, _ := regexp.MatchString("http", url)
-	if !isFullURL {
-		url = "https://archiveofourown.org" + url
+func toFullURL(url_ string) string {
+	url, err := url.Parse(url_)
+	if err != nil {
+		log.Fatal(err)
 	}
-	return url
+
+	url.Scheme = "https"
+	url.Host = "archiveofourown.org"
+
+	return url.String()
 }
 
 func sendt(c chan bool) {
