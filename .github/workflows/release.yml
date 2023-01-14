@@ -32,8 +32,9 @@ jobs:
           GOARCH: ${{ matrix.arch }}
 
       - name: Upload binaries
-        run:
-          "gh release upload ${{ github.ref }} release/*#${{ matrix.platform
-          }}-${{ matrix.arch }}"
+        run: |
+          files=(release/*)
+          gh release upload ${{ github.ref }} ${files[0]}#${{ matrix.platform }}-${{ matrix.arch }}
+
         env:
           GITHUB_TOKEN: ${{ github.token }}
