@@ -1,12 +1,16 @@
 # AO3Fetch
 
-Tool for scraping the work URLs off of any paginated view.
+Tool for scraping the work URLs off of any AO3 page. Capable of navigating the
+depths of index pages. Designed for use with the
+[FanFicFare](https://github.com/JimmXinu/FanFicFare) extension for Calibre.
 
 ## Arguments
 
-* **-url** [URL] - The base URL you want to crawl.
-* **-pages** [integer] - The number of pages of that URL you want to crawl.
-* -delay [integer] - the time to wait between starting page crawls, in seconds. Be nice to the servers and set this to a reasonable time, or leave it at the default 10 seconds.
-* -noseries - Will prevent the crawler from crawling series that it encounters, which it does by default.
-* -noprogress - Prevents the tool from showing a progress bar. Intended for instances where you're writing to a file.
-* -login [username:password] - Logs the tool in to AO3 using your account. Used for crawling works and bookmarks hidden from non-users.
+- `-url` (string) URL to start crawling from
+- `-delay` (int) Delay between requests in seconds (default 10)
+- `-login` (string) Login credentials in the form of username:password
+- `-pages` (int) Number of pages to crawl (default 1)
+- `-progress` (boolean) Show progress bar (default true, disable with
+  `-progress=false`)
+- `-series` (boolean) Include series in the crawl (default true, disable with
+  `-series=false`)
