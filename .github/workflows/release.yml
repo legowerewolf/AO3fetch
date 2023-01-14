@@ -5,7 +5,7 @@ name: Build Release
 
 on:
   release:
-    types: [released, edited]
+    types: [released]
 
 jobs:
   build:
