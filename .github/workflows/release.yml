@@ -5,7 +5,7 @@ name: Build Release
 
 on:
   release:
-    types: [released]
+    types: [released, edited]
 
 jobs:
   build:
@@ -35,3 +35,5 @@ jobs:
         run:
           "gh release upload ${{ github.ref }} release/*#${{ matrix.platform
           }}-${{ matrix.arch }}"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
