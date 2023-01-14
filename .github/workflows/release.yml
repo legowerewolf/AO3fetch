@@ -34,7 +34,7 @@ jobs:
       - name: Upload binaries
         run: |
           files=(release/*)
-          gh release upload ${{ github.ref }} ${files[0]}#${{ matrix.platform }}-${{ matrix.arch }}
+          gh release upload ${{ github.ref_name }} ${files[0]}#${{ matrix.platform }}-${{ matrix.arch }}
 
         env:
           GITHUB_TOKEN: ${{ github.token }}
