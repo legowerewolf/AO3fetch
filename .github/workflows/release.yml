@@ -16,6 +16,9 @@ jobs:
       matrix:
         platform: [windows, darwin, linux]
         arch: [amd64, 386]
+        exclude:
+          - platform: darwin
+            arch: 386
     steps:
       - uses: actions/checkout@v3
 
