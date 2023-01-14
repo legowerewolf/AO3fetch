@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cheggaaa/pb/v3"
 	mapset "github.com/deckarep/golang-set/v2"
 	"golang.org/x/net/html"
-	"gopkg.in/cheggaaa/pb.v1"
 )
 
 var isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
@@ -79,7 +79,11 @@ func main() {
 
 	// Start processing pages
 
-	log.Println("Running at", seedURL.String(), "across", strconv.Itoa(pages), "pages with a", strconv.Itoa(delay), "second delay and series set to", strconv.FormatBool(includeSeries))
+	log.Println("Printing scrape parameters:")
+	fmt.Println("URL:    ", seedURL)
+	fmt.Println("Pages:  ", pages)
+	fmt.Println("Series?:", includeSeries)
+	fmt.Println("Delay:  ", delay)
 
 	queue := make(chan string, 10*pages)
 	returned_works := make(chan string)
@@ -90,6 +94,7 @@ func main() {
 	go crawl_queue(queue, delay, returned_works, returned_series, finished)
 
 	bar := pb.New(pages)
+	bar.SetTemplateString(`{{counters .}} {{bar . " " ("█" | green) ("█" | green) ("█" | white) " "}} {{percent .}} {{rtime .}}`)
 	if showProgress {
 		bar.Start()
 	}
@@ -112,10 +117,9 @@ func main() {
 			}
 
 			series_set.Add(url)
-			log.Println("Found series", url)
 			queue <- url
 			addlPages++
-			bar.SetTotal(pages + addlPages)
+			bar.SetTotal(int64(pages + addlPages))
 
 		case <-finished:
 			crawled++
@@ -142,7 +146,7 @@ func fill_queue(queue chan string, delay int, seedURL *url.URL, pages int) {
 
 		queue <- seedURL.String()
 	}
-	log.Println("Filled queue with", pages, "pages")
+	log.Println("Loaded queue with", pages, "page(s)")
 }
 
 func crawl_queue(queue chan string, delay int, returned_works, returned_series chan string, finished chan bool) {
