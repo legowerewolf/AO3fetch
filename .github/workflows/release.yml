@@ -33,8 +33,9 @@ jobs:
 
       - name: Upload binaries
         run: |
-          files=(release/*)
-          gh release upload ${{ github.ref_name }} ${files[0]}#${{ matrix.platform }}-${{ matrix.arch }}
-
+          binary=(release/*)
+          archive=ao3fetch-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip
+          zip $archive ${file[0]}
+          gh release upload ${{ github.ref_name }} $archive#${{ matrix.platform }}-${{ matrix.arch }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
