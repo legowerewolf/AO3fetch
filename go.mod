@@ -3,6 +3,7 @@ module github.com/legowerewolf/AO3fetch
 go 1.19
 
 require (
+	github.com/deckarep/golang-set/v2 v2.1.0
 	golang.org/x/net v0.5.0
 	gopkg.in/cheggaaa/pb.v1 v1.0.28
 )

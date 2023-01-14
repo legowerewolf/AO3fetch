@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	mapset "github.com/deckarep/golang-set/v2"
 	"golang.org/x/net/html"
 	"gopkg.in/cheggaaa/pb.v1"
 )
@@ -93,25 +94,29 @@ func main() {
 		bar.Start()
 	}
 
-	//TODO: use empty struct instead of bool
-	works_set := make(map[string]bool)
-	series_set := make(map[string]bool)
+	works_set := mapset.NewSet[string]()
+	series_set := mapset.NewSet[string]()
 
 	// Get works and series
 	for crawled, addlPages := 0, 0; crawled < pages+addlPages; {
 		select {
 		case url := <-returned_works:
-			works_set[url] = true
+			works_set.Add(url)
 		case url := <-returned_series:
-			if series_set[url] || !includeSeries {
+			if !includeSeries {
 				continue
-			} else {
-				series_set[url] = true
-				log.Println("Found series", url)
-				queue <- url
-				addlPages++
-				bar.SetTotal(pages + addlPages)
 			}
+
+			if series_set.Contains(url) {
+				continue
+			}
+
+			series_set.Add(url)
+			log.Println("Found series", url)
+			queue <- url
+			addlPages++
+			bar.SetTotal(pages + addlPages)
+
 		case <-finished:
 			crawled++
 			bar.Increment()
@@ -120,9 +125,11 @@ func main() {
 
 	bar.Finish()
 
-	fmt.Println("\nFound", len(works_set), "works across", pages, "pages and", len(series_set), "series:\n ")
-	for url := range works_set {
-		fmt.Println(toFullURL(url))
+	fmt.Println("\nFound", works_set.Cardinality(), "works across", pages, "pages and", series_set.Cardinality(), "series:\n ")
+
+	// iterate over works_set
+	for url := range works_set.Iter() {
+		fmt.Println(url)
 	}
 }
 
@@ -183,10 +190,10 @@ func crawl(url string, returned_works, returned_series chan string, finished cha
 		isSpecial := isSpecialMatcher.MatchString(href)
 
 		if isWork && !isSpecial {
-			returned_works <- href
+			returned_works <- toFullURL(href)
 		}
 		if isSeries && !isSpecial && !isSeriesMatcher.MatchString(url) {
-			returned_series <- href
+			returned_series <- toFullURL(href)
 		}
 
 	}
