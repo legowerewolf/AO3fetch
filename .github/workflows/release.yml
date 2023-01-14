@@ -5,9 +5,7 @@ name: Build Release
 
 on:
   release:
-    types: [published]
-  push:
-    branches: [main]
+    types: [released]
 
 jobs:
   build:
@@ -34,7 +32,6 @@ jobs:
           GOARCH: ${{ matrix.arch }}
 
       - name: Upload binaries
-        uses: actions/upload-artifact@v2
-        with:
-          name: ${{ matrix.platform }}-${{ matrix.arch }}
-          path: release/*
+        run:
+          "gh release upload ${{ github.ref }} release/*#${{ matrix.platform
+          }}-${{ matrix.arch }}"
