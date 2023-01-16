@@ -85,12 +85,21 @@ func main() {
 	fmt.Println("Series?:", includeSeries)
 	fmt.Println("Delay:  ", delay)
 
+	// make and populate queue
 	queue := make(chan string, 10*pages)
+	for page := 1; page <= pages; page++ {
+		query := seedURL.Query()
+		query.Set("page", strconv.Itoa(page))
+		seedURL.RawQuery = query.Encode()
+
+		queue <- seedURL.String()
+	}
+	log.Println("Loaded queue with", pages, "page(s)")
+
 	returned_works := make(chan string)
 	returned_series := make(chan string)
 	finished := make(chan bool)
 
-	go fill_queue(queue, delay, seedURL, pages)
 	go crawl_queue(queue, delay, returned_works, returned_series, finished)
 
 	bar := pb.New(pages)
@@ -120,7 +129,6 @@ func main() {
 			queue <- url
 			addlPages++
 			bar.SetTotal(int64(pages + addlPages))
-
 		case <-finished:
 			crawled++
 			bar.Increment()
@@ -135,18 +143,6 @@ func main() {
 	for url := range works_set.Iter() {
 		fmt.Println(url)
 	}
-}
-
-func fill_queue(queue chan string, delay int, seedURL *url.URL, pages int) {
-	for page := 1; page <= pages; page++ {
-
-		query := seedURL.Query()
-		query.Set("page", strconv.Itoa(page))
-		seedURL.RawQuery = query.Encode()
-
-		queue <- seedURL.String()
-	}
-	log.Println("Loaded queue with", pages, "page(s)")
 }
 
 func crawl_queue(queue chan string, delay int, returned_works, returned_series chan string, finished chan bool) {
