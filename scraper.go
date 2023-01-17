@@ -81,12 +81,12 @@ func main() {
 	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos`)
 
 	// make the coordination channels, queue, and sets
-	returned_works := make(chan string)   // relays detected work URLs back to coordinator
-	returned_series := make(chan string)  // ditto for series
-	finished := make(chan bool)           // tell coordinator when a crawl is finished
-	queue := deque.New[string](pages)     // stores URLs to be crawled
-	works_set := mapset.NewSet[string]()  // stores URLs of works that have been detected
-	series_set := mapset.NewSet[string]() // ditto for series
+	returnedWorks := make(chan string)   // relays detected work URLs back to coordinator
+	returnedSeries := make(chan string)  // ditto for series
+	finished := make(chan bool)          // tell coordinator when a crawl is finished
+	queue := deque.New[string](pages)    // stores URLs to be crawled
+	workSet := mapset.NewSet[string]()   // stores URLs of works that have been detected
+	seriesSet := mapset.NewSet[string]() // ditto for series
 
 	// initialization done, start scraping
 
@@ -112,38 +112,37 @@ func main() {
 		bar.Start()
 	}
 
-	for rlimiter := time.Tick(time.Duration(delay) * time.Second); queue.Len() > 0; <-rlimiter {
-		go crawl(queue.Front(), returned_works, returned_series, finished)
+	for rateLimiter := time.Tick(time.Duration(delay) * time.Second); queue.Len() > 0; <-rateLimiter {
+		go crawl(queue.Front(), returnedWorks, returnedSeries, finished)
 
 		// "the coordinator"
-		for crawl_in_progress := true; crawl_in_progress; {
+		for crawlInProgress := true; crawlInProgress; {
 			select {
-			case work := <-returned_works: // save detected works
-				works_set.Add(work)
-			case series := <-returned_series: // save detected series, add unique series to queue
+			case work := <-returnedWorks: // save detected works
+				workSet.Add(work)
+			case series := <-returnedSeries: // save detected series, add unique series to queue
 				if !includeSeries {
 					continue
 				}
 
-				if series_set.Contains(series) {
+				if seriesSet.Contains(series) {
 					continue
 				}
 
-				series_set.Add(series)
+				seriesSet.Add(series)
 				queue.PushBack(series)
-				bar.SetTotal(int64(pages + series_set.Cardinality()))
+				bar.SetTotal(int64(pages + seriesSet.Cardinality()))
 			case shouldRetry := <-finished: // exit coordinator loop when crawl is finished
 				if shouldRetry {
 					queue.Rotate(1)
 				} else {
 					queue.PopFront()
+					bar.Increment()
 				}
 
-				crawl_in_progress = false
+				crawlInProgress = false
 			}
 		}
-
-		bar.Increment()
 
 		// exit immediately if queue is empty
 		if queue.Len() == 0 {
@@ -153,47 +152,47 @@ func main() {
 
 	bar.Finish()
 
-	log.Println("Found", works_set.Cardinality(), "works across", pages, "pages and", series_set.Cardinality(), "series.")
+	log.Println("Found", workSet.Cardinality(), "works across", pages, "pages and", seriesSet.Cardinality(), "series.")
 	fmt.Println()
 
 	// iterate over works_set
-	for url := range works_set.Iter() {
+	for url := range workSet.Iter() {
 		fmt.Println(url)
 	}
 }
 
-func crawl(crawl_url string, returned_works, returned_series chan string, finished chan bool) {
+func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished chan bool) {
 	shouldRetry := false
 	defer func() {
 		finished <- shouldRetry
 	}()
 
-	resp, err := http.DefaultClient.Get(toFullURL(crawl_url))
+	resp, err := http.DefaultClient.Get(toFullURL(crawlUrl))
 	if err != nil {
 		err := err.(*url.Error)
 
 		if err.Timeout() {
-			log.Println("Request timed out. Will retry later.", crawl_url)
+			log.Println("Request timed out. Will retry later.", crawlUrl)
 			shouldRetry = true
 			return
 		}
 
-		log.Println("Request failed. Skipping.", err.Error(), crawl_url)
+		log.Println("Request failed. Skipping.", err.Error(), crawlUrl)
 		return
 	}
 	defer resp.Body.Close()
 	if codeClass := resp.StatusCode / 100; codeClass != 2 {
 		switch codeClass {
 		case 4:
-			log.Println("Bad request. Skipping.", resp.StatusCode, crawl_url)
+			log.Println("Bad request. Skipping.", resp.StatusCode, crawlUrl)
 		case 5:
-			log.Println("Server error. Will retry later.", resp.StatusCode, crawl_url)
+			log.Println("Server error. Will retry later.", resp.StatusCode, crawlUrl)
 			shouldRetry = true
 		}
 		return
 	}
 
-	crawledPageIsSeries := isSeriesMatcher.MatchString(crawl_url)
+	crawledPageIsSeries := isSeriesMatcher.MatchString(crawlUrl)
 
 	tokenizer := html.NewTokenizer(resp.Body)
 	for tt := tokenizer.Next(); tt != html.ErrorToken; tt = tokenizer.Next() {
@@ -216,10 +215,10 @@ func crawl(crawl_url string, returned_works, returned_series chan string, finish
 		isSeries := isSeriesMatcher.MatchString(href)
 
 		if isWork {
-			returned_works <- toFullURL(href)
+			returnedWorks <- toFullURL(href)
 		}
 		if isSeries && !crawledPageIsSeries {
-			returned_series <- toFullURL(href)
+			returnedSeries <- toFullURL(href)
 		}
 	}
 }
