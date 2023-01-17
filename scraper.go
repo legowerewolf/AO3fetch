@@ -14,6 +14,7 @@ import (
 
 	"github.com/cheggaaa/pb/v3"
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/gammazero/deque"
 	"golang.org/x/net/html"
 )
 
@@ -28,14 +29,12 @@ func main() {
 	var credentials string
 
 	// parse flags
-
 	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from")
 	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl")
 	flag.BoolVar(&includeSeries, "series", true, "Include series in the crawl")
 	flag.IntVar(&delay, "delay", 10, "Delay between requests")
 	flag.BoolVar(&showProgress, "progress", true, "Show progress bar")
 	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password")
-
 	flag.Parse()
 
 	// Check parameters
@@ -70,68 +69,79 @@ func main() {
 		if err != nil {
 			log.Fatal("Authentication failure. Check your credentials and try again.")
 		}
+
+		log.Println("Login successful.")
 	}
 
-	// Finish initialization
+	// parameters all check out, finish initializing
+
+	// compile regexes
 	isWorkMatcher = regexp.MustCompile(`/works/\d+`)
 	isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
 	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos`)
 
-	// Start processing pages
+	// make the coordination channels, queue, and sets
+	returned_works := make(chan string)   // relays detected work URLs back to coordinator
+	returned_series := make(chan string)  // ditto for series
+	finished := make(chan bool)           // tell coordinator when a crawl is finished
+	queue := deque.New[string]()          // stores URLs to be crawled
+	works_set := mapset.NewSet[string]()  // stores URLs of works that have been detected
+	series_set := mapset.NewSet[string]() // ditto for series
 
-	log.Println("Printing scrape parameters:")
+	// initialization done, start scraping
+
+	log.Println("Scrape parameters:")
 	fmt.Println("URL:    ", seedURL)
 	fmt.Println("Pages:  ", pages)
 	fmt.Println("Series?:", includeSeries)
 	fmt.Println("Delay:  ", delay)
 
-	// make and populate queue
-	queue := make(chan string, 10*pages)
+	// populate queue
 	for page := 1; page <= pages; page++ {
 		query := seedURL.Query()
 		query.Set("page", strconv.Itoa(page))
 		seedURL.RawQuery = query.Encode()
 
-		queue <- seedURL.String()
+		queue.PushBack(seedURL.String())
 	}
-	log.Println("Loaded queue with", pages, "page(s)")
 
-	returned_works := make(chan string)
-	returned_series := make(chan string)
-	finished := make(chan bool)
-
-	go crawl_queue(queue, delay, returned_works, returned_series, finished)
-
+	// set up and start progress bar
 	bar := pb.New(pages)
 	bar.SetTemplateString(`{{counters .}} {{bar . " " ("█" | green) ("█" | green) ("█" | white) " "}} {{percent .}} {{rtime .}}`)
 	if showProgress {
 		bar.Start()
 	}
 
-	works_set := mapset.NewSet[string]()
-	series_set := mapset.NewSet[string]()
+	for rlimiter := time.Tick(time.Duration(delay) * time.Second); queue.Len() > 0; <-rlimiter {
+		go crawl(queue.PopFront(), returned_works, returned_series, finished)
 
-	// Get works and series
-	for crawled, addlPages := 0, 0; crawled < pages+addlPages; {
-		select {
-		case url := <-returned_works:
-			works_set.Add(url)
-		case url := <-returned_series:
-			if !includeSeries {
-				continue
+		// "the coordinator"
+		for crawl_in_progress := true; crawl_in_progress; {
+			select {
+			case work := <-returned_works: // save detected works
+				works_set.Add(work)
+			case series := <-returned_series: // save detected series, add unique series to queue
+				if !includeSeries {
+					continue
+				}
+
+				if series_set.Contains(series) {
+					continue
+				}
+
+				series_set.Add(series)
+				queue.PushBack(series)
+				bar.SetTotal(int64(pages + series_set.Cardinality()))
+			case <-finished: // exit coordinator loop when crawl is finished
+				crawl_in_progress = false
 			}
+		}
 
-			if series_set.Contains(url) {
-				continue
-			}
+		bar.Increment()
 
-			series_set.Add(url)
-			queue <- url
-			addlPages++
-			bar.SetTotal(int64(pages + addlPages))
-		case <-finished:
-			crawled++
-			bar.Increment()
+		// exit immediately if queue is empty
+		if queue.Len() == 0 {
+			break
 		}
 	}
 
@@ -142,13 +152,6 @@ func main() {
 	// iterate over works_set
 	for url := range works_set.Iter() {
 		fmt.Println(url)
-	}
-}
-
-func crawl_queue(queue chan string, delay int, returned_works, returned_series chan string, finished chan bool) {
-	for url := range queue {
-		go crawl(url, returned_works, returned_series, finished)
-		time.Sleep(time.Duration(delay) * time.Second)
 	}
 }
 

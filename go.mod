@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/cheggaaa/pb/v3 v3.1.0
 	github.com/deckarep/golang-set/v2 v2.1.0
+	github.com/gammazero/deque v0.2.1
 	golang.org/x/net v0.5.0
 )
 
