@@ -84,7 +84,7 @@ func main() {
 	returned_works := make(chan string)   // relays detected work URLs back to coordinator
 	returned_series := make(chan string)  // ditto for series
 	finished := make(chan bool)           // tell coordinator when a crawl is finished
-	queue := deque.New[string]()          // stores URLs to be crawled
+	queue := deque.New[string](pages)     // stores URLs to be crawled
 	works_set := mapset.NewSet[string]()  // stores URLs of works that have been detected
 	series_set := mapset.NewSet[string]() // ditto for series
 
