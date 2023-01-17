@@ -167,6 +167,7 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 		finished <- shouldRetry
 	}()
 
+	// make request, handle errors
 	resp, err := http.DefaultClient.Get(toFullURL(crawlUrl))
 	if err != nil {
 		err := err.(*url.Error)
@@ -177,7 +178,7 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 			return
 		}
 
-		log.Println("Request failed. Skipping.", err.Error(), crawlUrl)
+		log.Println("Unknown error. Skipping.", err.Error(), crawlUrl)
 		return
 	}
 	defer resp.Body.Close()
@@ -188,6 +189,8 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 		case 5:
 			log.Println("Server error. Will retry later.", resp.StatusCode, crawlUrl)
 			shouldRetry = true
+		default:
+			log.Println("Unknown error. Skipping.", resp.StatusCode, crawlUrl)
 		}
 		return
 	}
@@ -211,13 +214,9 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 			continue
 		}
 
-		isWork := isWorkMatcher.MatchString(href)
-		isSeries := isSeriesMatcher.MatchString(href)
-
-		if isWork {
+		if isWorkMatcher.MatchString(href) {
 			returnedWorks <- toFullURL(href)
-		}
-		if isSeries && !crawledPageIsSeries {
+		} else if !crawledPageIsSeries && isSeriesMatcher.MatchString(href) {
 			returnedSeries <- toFullURL(href)
 		}
 	}
