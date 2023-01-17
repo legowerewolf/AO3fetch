@@ -153,7 +153,8 @@ func main() {
 
 	bar.Finish()
 
-	fmt.Println("\nFound", works_set.Cardinality(), "works across", pages, "pages and", series_set.Cardinality(), "series:\n ")
+	log.Println("Found", works_set.Cardinality(), "works across", pages, "pages and", series_set.Cardinality(), "series.")
+	fmt.Println()
 
 	// iterate over works_set
 	for url := range works_set.Iter() {
