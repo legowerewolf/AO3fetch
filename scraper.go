@@ -97,8 +97,8 @@ func main() {
 	fmt.Println("Delay:  ", delay)
 
 	// populate queue
+	query := seedURL.Query()
 	for page := 1; page <= pages; page++ {
-		query := seedURL.Query()
 		query.Set("page", strconv.Itoa(page))
 		seedURL.RawQuery = query.Encode()
 
