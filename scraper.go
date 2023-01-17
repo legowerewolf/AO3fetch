@@ -113,7 +113,7 @@ func main() {
 	}
 
 	for rlimiter := time.Tick(time.Duration(delay) * time.Second); queue.Len() > 0; <-rlimiter {
-		go crawl(queue.PopFront(), returned_works, returned_series, finished)
+		go crawl(queue.Front(), returned_works, returned_series, finished)
 
 		// "the coordinator"
 		for crawl_in_progress := true; crawl_in_progress; {
@@ -132,7 +132,13 @@ func main() {
 				series_set.Add(series)
 				queue.PushBack(series)
 				bar.SetTotal(int64(pages + series_set.Cardinality()))
-			case <-finished: // exit coordinator loop when crawl is finished
+			case shouldRetry := <-finished: // exit coordinator loop when crawl is finished
+				if shouldRetry {
+					queue.Rotate(1)
+				} else {
+					queue.PopFront()
+				}
+
 				crawl_in_progress = false
 			}
 		}
@@ -155,18 +161,34 @@ func main() {
 	}
 }
 
-func crawl(url string, returned_works, returned_series chan string, finished chan bool) {
-	defer sendt(finished)
+func crawl(crawl_url string, returned_works, returned_series chan string, finished chan bool) {
+	shouldRetry := false
+	defer func() {
+		finished <- shouldRetry
+	}()
 
-	req, err := http.NewRequest("GET", toFullURL(url), nil)
+	resp, err := http.DefaultClient.Get(toFullURL(crawl_url))
 	if err != nil {
-		log.Fatal(err)
+		err := err.(*url.Error)
+
+		if err.Timeout() {
+			log.Println("Request timed out. Will retry later.", crawl_url)
+			shouldRetry = true
+			return
+		}
+
+		log.Println("Request failed. Skipping.", err.Error(), crawl_url)
+		return
 	}
-
-	resp, err := http.DefaultClient.Do(req)
-
-	if err != nil {
-		log.Println("ERROR: Failed to crawl \"" + url + "\"")
+	defer resp.Body.Close()
+	if codeClass := resp.StatusCode / 100; codeClass != 2 {
+		switch codeClass {
+		case 4:
+			log.Println("Bad request. Skipping.", resp.StatusCode, crawl_url)
+		case 5:
+			log.Println("Server error. Will retry later.", resp.StatusCode, crawl_url)
+			shouldRetry = true
+		}
 		return
 	}
 
@@ -222,8 +244,4 @@ func toFullURL(url_ string) string {
 	url.Host = "archiveofourown.org"
 
 	return url.String()
-}
-
-func sendt(c chan bool) {
-	c <- true
 }
