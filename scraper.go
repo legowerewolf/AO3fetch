@@ -14,6 +14,7 @@ import (
 
 	"github.com/cheggaaa/pb/v3"
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/gammazero/deque"
 	"golang.org/x/net/html"
 )
 
@@ -28,14 +29,12 @@ func main() {
 	var credentials string
 
 	// parse flags
-
 	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from")
 	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl")
 	flag.BoolVar(&includeSeries, "series", true, "Include series in the crawl")
 	flag.IntVar(&delay, "delay", 10, "Delay between requests")
 	flag.BoolVar(&showProgress, "progress", true, "Show progress bar")
 	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password")
-
 	flag.Parse()
 
 	// Check parameters
@@ -70,66 +69,92 @@ func main() {
 		if err != nil {
 			log.Fatal("Authentication failure. Check your credentials and try again.")
 		}
+
+		log.Println("Login successful.")
 	}
 
-	// Finish initialization
+	// parameters all check out, finish initializing
+
+	// compile regexes
 	isWorkMatcher = regexp.MustCompile(`/works/\d+`)
 	isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
 	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos`)
 
-	// Start processing pages
+	// make the coordination channels, queue, and sets
+	returned_works := make(chan string)   // relays detected work URLs back to coordinator
+	returned_series := make(chan string)  // ditto for series
+	finished := make(chan bool)           // tell coordinator when a crawl is finished
+	queue := deque.New[string](pages)     // stores URLs to be crawled
+	works_set := mapset.NewSet[string]()  // stores URLs of works that have been detected
+	series_set := mapset.NewSet[string]() // ditto for series
 
-	log.Println("Printing scrape parameters:")
+	// initialization done, start scraping
+
+	log.Println("Scrape parameters:")
 	fmt.Println("URL:    ", seedURL)
 	fmt.Println("Pages:  ", pages)
 	fmt.Println("Series?:", includeSeries)
 	fmt.Println("Delay:  ", delay)
 
-	queue := make(chan string, 10*pages)
-	returned_works := make(chan string)
-	returned_series := make(chan string)
-	finished := make(chan bool)
+	// populate queue
+	query := seedURL.Query()
+	for page := 1; page <= pages; page++ {
+		query.Set("page", strconv.Itoa(page))
+		seedURL.RawQuery = query.Encode()
 
-	go fill_queue(queue, delay, seedURL, pages)
-	go crawl_queue(queue, delay, returned_works, returned_series, finished)
+		queue.PushBack(seedURL.String())
+	}
 
+	// set up and start progress bar
 	bar := pb.New(pages)
 	bar.SetTemplateString(`{{counters .}} {{bar . " " ("█" | green) ("█" | green) ("█" | white) " "}} {{percent .}} {{rtime .}}`)
 	if showProgress {
 		bar.Start()
 	}
 
-	works_set := mapset.NewSet[string]()
-	series_set := mapset.NewSet[string]()
+	for rlimiter := time.Tick(time.Duration(delay) * time.Second); queue.Len() > 0; <-rlimiter {
+		go crawl(queue.Front(), returned_works, returned_series, finished)
 
-	// Get works and series
-	for crawled, addlPages := 0, 0; crawled < pages+addlPages; {
-		select {
-		case url := <-returned_works:
-			works_set.Add(url)
-		case url := <-returned_series:
-			if !includeSeries {
-				continue
+		// "the coordinator"
+		for crawl_in_progress := true; crawl_in_progress; {
+			select {
+			case work := <-returned_works: // save detected works
+				works_set.Add(work)
+			case series := <-returned_series: // save detected series, add unique series to queue
+				if !includeSeries {
+					continue
+				}
+
+				if series_set.Contains(series) {
+					continue
+				}
+
+				series_set.Add(series)
+				queue.PushBack(series)
+				bar.SetTotal(int64(pages + series_set.Cardinality()))
+			case shouldRetry := <-finished: // exit coordinator loop when crawl is finished
+				if shouldRetry {
+					queue.Rotate(1)
+				} else {
+					queue.PopFront()
+				}
+
+				crawl_in_progress = false
 			}
+		}
 
-			if series_set.Contains(url) {
-				continue
-			}
+		bar.Increment()
 
-			series_set.Add(url)
-			queue <- url
-			addlPages++
-			bar.SetTotal(int64(pages + addlPages))
-
-		case <-finished:
-			crawled++
-			bar.Increment()
+		// exit immediately if queue is empty
+		if queue.Len() == 0 {
+			break
 		}
 	}
 
 	bar.Finish()
 
-	fmt.Println("\nFound", works_set.Cardinality(), "works across", pages, "pages and", series_set.Cardinality(), "series:\n ")
+	log.Println("Found", works_set.Cardinality(), "works across", pages, "pages and", series_set.Cardinality(), "series.")
+	fmt.Println()
 
 	// iterate over works_set
 	for url := range works_set.Iter() {
@@ -137,71 +162,66 @@ func main() {
 	}
 }
 
-func fill_queue(queue chan string, delay int, seedURL *url.URL, pages int) {
-	for page := 1; page <= pages; page++ {
+func crawl(crawl_url string, returned_works, returned_series chan string, finished chan bool) {
+	shouldRetry := false
+	defer func() {
+		finished <- shouldRetry
+	}()
 
-		query := seedURL.Query()
-		query.Set("page", strconv.Itoa(page))
-		seedURL.RawQuery = query.Encode()
-
-		queue <- seedURL.String()
-	}
-	log.Println("Loaded queue with", pages, "page(s)")
-}
-
-func crawl_queue(queue chan string, delay int, returned_works, returned_series chan string, finished chan bool) {
-	for url := range queue {
-		go crawl(url, returned_works, returned_series, finished)
-		time.Sleep(time.Duration(delay) * time.Second)
-	}
-}
-
-func crawl(url string, returned_works, returned_series chan string, finished chan bool) {
-	defer sendt(finished)
-
-	req, err := http.NewRequest("GET", toFullURL(url), nil)
+	resp, err := http.DefaultClient.Get(toFullURL(crawl_url))
 	if err != nil {
-		log.Fatal(err)
+		err := err.(*url.Error)
+
+		if err.Timeout() {
+			log.Println("Request timed out. Will retry later.", crawl_url)
+			shouldRetry = true
+			return
+		}
+
+		log.Println("Request failed. Skipping.", err.Error(), crawl_url)
+		return
 	}
-
-	resp, err := http.DefaultClient.Do(req)
-
-	if err != nil {
-		log.Println("ERROR: Failed to crawl \"" + url + "\"")
+	defer resp.Body.Close()
+	if codeClass := resp.StatusCode / 100; codeClass != 2 {
+		switch codeClass {
+		case 4:
+			log.Println("Bad request. Skipping.", resp.StatusCode, crawl_url)
+		case 5:
+			log.Println("Server error. Will retry later.", resp.StatusCode, crawl_url)
+			shouldRetry = true
+		}
 		return
 	}
 
-	z := html.NewTokenizer(resp.Body)
+	crawledPageIsSeries := isSeriesMatcher.MatchString(crawl_url)
 
-	for tt := z.Next(); tt != html.ErrorToken; tt = z.Next() {
-		if tt != html.StartTagToken {
+	tokenizer := html.NewTokenizer(resp.Body)
+	for tt := tokenizer.Next(); tt != html.ErrorToken; tt = tokenizer.Next() {
+		token := tokenizer.Token()
+
+		if !(token.Type == html.StartTagToken && token.Data == "a") {
 			continue
 		}
 
-		t := z.Token()
-
-		if t.Data != "a" {
-			continue
-		}
-
-		href, err := getHref(t)
+		href, err := getHref(token)
 		if err != nil {
+			continue
+		}
+
+		if isSpecialMatcher.MatchString(href) {
 			continue
 		}
 
 		isWork := isWorkMatcher.MatchString(href)
 		isSeries := isSeriesMatcher.MatchString(href)
-		isSpecial := isSpecialMatcher.MatchString(href)
 
-		if isWork && !isSpecial {
+		if isWork {
 			returned_works <- toFullURL(href)
 		}
-		if isSeries && !isSpecial && !isSeriesMatcher.MatchString(url) {
+		if isSeries && !crawledPageIsSeries {
 			returned_series <- toFullURL(href)
 		}
-
 	}
-
 }
 
 func getHref(t html.Token) (string, error) {
@@ -223,8 +243,4 @@ func toFullURL(url_ string) string {
 	url.Host = "archiveofourown.org"
 
 	return url.String()
-}
-
-func sendt(c chan bool) {
-	c <- true
 }
