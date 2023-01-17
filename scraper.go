@@ -192,37 +192,35 @@ func crawl(crawl_url string, returned_works, returned_series chan string, finish
 		return
 	}
 
-	z := html.NewTokenizer(resp.Body)
+	crawledPageIsSeries := isSeriesMatcher.MatchString(crawl_url)
 
-	for tt := z.Next(); tt != html.ErrorToken; tt = z.Next() {
-		if tt != html.StartTagToken {
+	tokenizer := html.NewTokenizer(resp.Body)
+	for tt := tokenizer.Next(); tt != html.ErrorToken; tt = tokenizer.Next() {
+		token := tokenizer.Token()
+
+		if !(token.Type == html.StartTagToken && token.Data == "a") {
 			continue
 		}
 
-		t := z.Token()
-
-		if t.Data != "a" {
-			continue
-		}
-
-		href, err := getHref(t)
+		href, err := getHref(token)
 		if err != nil {
+			continue
+		}
+
+		if isSpecialMatcher.MatchString(href) {
 			continue
 		}
 
 		isWork := isWorkMatcher.MatchString(href)
 		isSeries := isSeriesMatcher.MatchString(href)
-		isSpecial := isSpecialMatcher.MatchString(href)
 
-		if isWork && !isSpecial {
+		if isWork {
 			returned_works <- toFullURL(href)
 		}
-		if isSeries && !isSpecial && !isSeriesMatcher.MatchString(url) {
+		if isSeries && !crawledPageIsSeries {
 			returned_series <- toFullURL(href)
 		}
-
 	}
-
 }
 
 func getHref(t html.Token) (string, error) {
