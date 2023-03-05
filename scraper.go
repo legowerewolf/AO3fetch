@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 var isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
 
 func main() {
+	var showBuildInfo bool
 	var seedURLRaw string
 	var pages int
 	var includeSeries bool
@@ -29,6 +31,7 @@ func main() {
 	var credentials string
 
 	// parse flags
+	flag.BoolVar(&showBuildInfo, "buildinfo", false, "Show build information")
 	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from")
 	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl")
 	flag.BoolVar(&includeSeries, "series", true, "Include series in the crawl")
@@ -38,6 +41,18 @@ func main() {
 	flag.Parse()
 
 	// Check parameters
+
+	if showBuildInfo {
+		buildInfo, ok := debug.ReadBuildInfo()
+
+		if ok {
+			fmt.Println(buildInfo.Main.Version, buildInfo.Main.Sum)
+		} else {
+			log.Fatal("Build information not available")
+		}
+
+		return
+	}
 
 	var seedURL *url.URL
 	if seedURLRaw == "" {
