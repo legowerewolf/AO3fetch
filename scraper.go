@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 var isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
 
 func main() {
+	var showVersionAndQuit bool
 	var seedURLRaw string
 	var pages int
 	var includeSeries bool
@@ -29,6 +31,7 @@ func main() {
 	var credentials string
 
 	// parse flags
+	flag.BoolVar(&showVersionAndQuit, "version", false, "Show version information and quit")
 	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from")
 	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl")
 	flag.BoolVar(&includeSeries, "series", true, "Include series in the crawl")
@@ -38,6 +41,28 @@ func main() {
 	flag.Parse()
 
 	// Check parameters
+
+	if showVersionAndQuit {
+		buildInfo, ok := debug.ReadBuildInfo()
+		if !ok {
+			log.Fatal("Build information not available")
+		}
+
+		settings := make(map[string]string)
+		for _, setting := range buildInfo.Settings {
+			settings[setting.Key] = setting.Value
+		}
+
+		if settings["vcs.modified"] == "true" {
+			settings["vcs.revision"] += "+"
+		}
+
+		settings["GOARCH"] += "/" + settings["GO"+strings.ToUpper(settings["GOARCH"])]
+
+		fmt.Printf("%s:%s built by %s %s-%s\n", settings["vcs"], settings["vcs.revision"], buildInfo.GoVersion, settings["GOOS"], settings["GOARCH"])
+
+		return
+	}
 
 	var seedURL *url.URL
 	if seedURLRaw == "" {
