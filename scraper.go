@@ -31,6 +31,7 @@ func main() {
 		pages, delay                                    int
 		includeSeries, showProgress, showVersionAndQuit bool
 	)
+	flag.BoolVar(&showVersionAndQuit, "version", false, "Show version information and quit")
 	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from")
 	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl")
 	flag.BoolVar(&includeSeries, "series", true, "Include series in the crawl")
