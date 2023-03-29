@@ -18,17 +18,18 @@ import (
 	"golang.org/x/net/html"
 )
 
-var isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
+// global variables
+var (
+	isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
+)
 
 func main() {
-	var seedURLRaw string
-	var pages int
-	var includeSeries bool
-	var delay int
-	var showProgress bool
-	var credentials string
-
 	// parse flags
+	var (
+		seedURLRaw, credentials     string
+		pages, delay                int
+		includeSeries, showProgress bool
+	)
 	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from")
 	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl")
 	flag.BoolVar(&includeSeries, "series", true, "Include series in the crawl")
@@ -83,7 +84,7 @@ func main() {
 	// make the coordination channels, queue, and sets
 	returnedWorks := make(chan string)   // relays detected work URLs back to coordinator
 	returnedSeries := make(chan string)  // ditto for series
-	finished := make(chan bool)          // tell coordinator when a crawl is finished
+	finished := make(chan bool)          // tells coordinator when a crawl is finished
 	queue := deque.New[string](pages)    // stores URLs to be crawled
 	workSet := mapset.NewSet[string]()   // stores URLs of works that have been detected
 	seriesSet := mapset.NewSet[string]() // ditto for series
