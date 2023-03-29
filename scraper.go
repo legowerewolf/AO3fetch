@@ -59,7 +59,7 @@ func main() {
 
 		settings["GOARCH"] += "/" + settings["GO"+strings.ToUpper(settings["GOARCH"])]
 
-		fmt.Printf("%s:%s built by %s-%s\n", settings["vcs"], settings["vcs.revision"], settings["GOOS"], settings["GOARCH"])
+		fmt.Printf("%s:%s built by %s %s-%s\n", settings["vcs"], settings["vcs.revision"], buildInfo.GoVersion, settings["GOOS"], settings["GOARCH"])
 
 		return
 	}
