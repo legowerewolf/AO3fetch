@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "go",
+			"label": "Build",
+			"command": "build",
+			"problemMatcher": ["$go"],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		}
+	]
+}
