@@ -22,7 +22,7 @@ import (
 var isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
 
 func main() {
-	var showBuildInfo bool
+	var showVersionAndQuit bool
 	var seedURLRaw string
 	var pages int
 	var includeSeries bool
@@ -31,7 +31,7 @@ func main() {
 	var credentials string
 
 	// parse flags
-	flag.BoolVar(&showBuildInfo, "buildinfo", false, "Show build information")
+	flag.BoolVar(&showVersionAndQuit, "version", false, "Show version information and quit")
 	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from")
 	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl")
 	flag.BoolVar(&includeSeries, "series", true, "Include series in the crawl")
@@ -42,14 +42,24 @@ func main() {
 
 	// Check parameters
 
-	if showBuildInfo {
+	if showVersionAndQuit {
 		buildInfo, ok := debug.ReadBuildInfo()
-
-		if ok {
-			fmt.Println(buildInfo.Main.Version, buildInfo.Main.Sum)
-		} else {
+		if !ok {
 			log.Fatal("Build information not available")
 		}
+
+		settings := make(map[string]string)
+		for _, setting := range buildInfo.Settings {
+			settings[setting.Key] = setting.Value
+		}
+
+		if settings["vcs.modified"] == "true" {
+			settings["vcs.revision"] += "+"
+		}
+
+		settings["GOARCH"] += "/" + settings["GO"+strings.ToUpper(settings["GOARCH"])]
+
+		fmt.Printf("%s:%s built by %s-%s\n", settings["vcs"], settings["vcs.revision"], settings["GOOS"], settings["GOARCH"])
 
 		return
 	}
