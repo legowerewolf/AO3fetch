@@ -58,17 +58,15 @@ func (c *Ao3Client) PostForm(url string, data url.Values) (*http.Response, error
 	return c.Do(req)
 }
 
-var client *Ao3Client
-
-func login(username, password string) error {
+func (c *Ao3Client) Authenticate(username, password string) error {
 	ao3url, _ := url.Parse("https://archiveofourown.org/users/login")
 
-	_, err := client.PostForm(ao3url.String(), generateLoginForm(username, password))
+	_, err := c.PostForm(ao3url.String(), c.generateLoginForm(username, password))
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
 
-	for _, cookie := range client.Client.Jar.Cookies(ao3url) {
+	for _, cookie := range c.Client.Jar.Cookies(ao3url) {
 		if cookie.Name == "user_credentials" {
 			return nil
 		}
@@ -77,8 +75,8 @@ func login(username, password string) error {
 	return fmt.Errorf("login failed")
 }
 
-func getAo3Token() string {
-	resp, apiErr := client.Get("https://archiveofourown.org/token_dispenser.json")
+func (c *Ao3Client) getAo3Token() string {
+	resp, apiErr := c.Get("https://archiveofourown.org/token_dispenser.json")
 	if apiErr != nil {
 		log.Fatal(apiErr)
 	}
@@ -100,10 +98,10 @@ func getAo3Token() string {
 	return r["token"].(string)
 }
 
-func generateLoginForm(username, password string) url.Values {
+func (c *Ao3Client) generateLoginForm(username, password string) url.Values {
 	val := url.Values{}
 	val.Set("utf8", "✓")
-	val.Set("authenticity_token", getAo3Token())
+	val.Set("authenticity_token", c.getAo3Token())
 	val.Set("[user]login", username)
 	val.Set("[user]password", password)
 	val.Set("commit", "Log In")

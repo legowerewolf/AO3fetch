@@ -20,6 +20,7 @@ import (
 // global variables
 var (
 	isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
+	client                                           *Ao3Client
 )
 
 func main() {
@@ -72,12 +73,19 @@ func main() {
 		log.Println("Warning: Delay is less than 10 seconds. This may cause your IP to be blocked by the server.")
 	}
 
+	var err error
+	client, err = NewAo3Client()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if credentials != "" {
 		username, pass, _ := strings.Cut(credentials, ":")
 
 		log.Println("Logging in as " + username + "...")
 
-		err := login(username, pass)
+		err := client.Authenticate(username, pass)
 		if err != nil {
 			log.Fatal("Authentication failure. Check your credentials and try again.")
 		}
@@ -86,13 +94,6 @@ func main() {
 	}
 
 	// parameters all check out, finish initializing
-
-	var err error
-	client, err = NewAo3Client()
-
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	// compile regexes
 	isWorkMatcher = regexp.MustCompile(`/works/\d+`)
