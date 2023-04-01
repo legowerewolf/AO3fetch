@@ -14,3 +14,4 @@ depths of index pages. Designed for use with the
   `-progress=false`)
 - `-series` (boolean) Include series in the crawl (default true, disable with
   `-series=false`)
+- `-version` (boolean) Show version and exit (default false)
