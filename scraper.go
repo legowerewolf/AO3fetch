@@ -73,9 +73,9 @@ func main() {
 		log.Println("Warning: Delay is less than 10 seconds. This may cause your IP to be blocked by the server.")
 	}
 
+	// initialize client so we can check credentials if they're provided
 	var err error
 	client, err = NewAo3Client()
-
 	if err != nil {
 		log.Fatal(err)
 	}
