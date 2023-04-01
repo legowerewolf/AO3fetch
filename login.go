@@ -8,20 +8,67 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strings"
 )
 
+type Ao3Client struct {
+	Client          *http.Client
+	UserAgentString string
+}
+
+func NewAo3Client() (*Ao3Client, error) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return nil, err
+	}
+	client := &http.Client{Jar: jar}
+
+	buildInfo, err := GetBuildSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	uaString := fmt.Sprintf("legowerewolf-ao3scaper/%s", (*buildInfo)["vcs.revision.withModified"])
+
+	return &Ao3Client{Client: client, UserAgentString: uaString}, nil
+}
+
+func (c *Ao3Client) Do(req *http.Request) (*http.Response, error) {
+	req.Header.Set("User-Agent", c.UserAgentString)
+	return c.Client.Do(req)
+}
+
+func (c *Ao3Client) Get(url string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.Do(req)
+}
+
+func (c *Ao3Client) PostForm(url string, data url.Values) (*http.Response, error) {
+	req, err := http.NewRequest("POST", url, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	return c.Do(req)
+}
+
+var client *Ao3Client
+
 func login(username, password string) error {
-
-	http.DefaultClient.Jar, _ = cookiejar.New(nil)
-
 	ao3url, _ := url.Parse("https://archiveofourown.org/users/login")
 
-	_, err := http.PostForm(ao3url.String(), generateLoginForm(username, password))
+	_, err := client.PostForm(ao3url.String(), generateLoginForm(username, password))
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	for _, cookie := range http.DefaultClient.Jar.Cookies(ao3url) {
+	for _, cookie := range client.Client.Jar.Cookies(ao3url) {
 		if cookie.Name == "user_credentials" {
 			return nil
 		}
@@ -31,7 +78,7 @@ func login(username, password string) error {
 }
 
 func getAo3Token() string {
-	resp, apiErr := http.Get("https://archiveofourown.org/token_dispenser.json")
+	resp, apiErr := client.Get("https://archiveofourown.org/token_dispenser.json")
 	if apiErr != nil {
 		log.Fatal(apiErr)
 	}

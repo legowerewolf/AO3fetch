@@ -5,10 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"net/url"
 	"regexp"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -43,23 +41,12 @@ func main() {
 	// Check parameters
 
 	if showVersionAndQuit {
-		buildInfo, ok := debug.ReadBuildInfo()
-		if !ok {
-			log.Fatal("Build information not available")
+		settings, err := GetBuildSettings()
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		settings := make(map[string]string)
-		for _, setting := range buildInfo.Settings {
-			settings[setting.Key] = setting.Value
-		}
-
-		if settings["vcs.modified"] == "true" {
-			settings["vcs.revision"] += "+"
-		}
-
-		settings["GOARCH"] += "/" + settings["GO"+strings.ToUpper(settings["GOARCH"])]
-
-		fmt.Printf("%s:%s built by %s %s-%s\n", settings["vcs"], settings["vcs.revision"], buildInfo.GoVersion, settings["GOOS"], settings["GOARCH"])
+		fmt.Printf("%s:%s built by %s %s-%s\n", (*settings)["vcs"], (*settings)["vcs.revision.withModified"], (*settings)["GOVERSION"], (*settings)["GOOS"], (*settings)["GOARCH.withVersion"])
 
 		return
 	}
@@ -99,6 +86,13 @@ func main() {
 	}
 
 	// parameters all check out, finish initializing
+
+	var err error
+	client, err = NewAo3Client()
+
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// compile regexes
 	isWorkMatcher = regexp.MustCompile(`/works/\d+`)
@@ -193,7 +187,7 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 	}()
 
 	// make request, handle errors
-	resp, err := http.DefaultClient.Get(toFullURL(crawlUrl))
+	resp, err := client.Get(toFullURL(crawlUrl))
 	if err != nil {
 		err := err.(*url.Error)
 
