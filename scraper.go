@@ -14,13 +14,15 @@ import (
 	"github.com/cheggaaa/pb/v3"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gammazero/deque"
+	"github.com/legowerewolf/AO3fetch/ao3client"
+	"github.com/legowerewolf/AO3fetch/buildinfo"
 	"golang.org/x/net/html"
 )
 
 // global variables
 var (
 	isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
-	client                                           *Ao3Client
+	client                                           *ao3client.Ao3Client
 )
 
 func main() {
@@ -42,7 +44,7 @@ func main() {
 	// Check parameters
 
 	if showVersionAndQuit {
-		settings, err := GetBuildSettings()
+		settings, err := buildinfo.GetBuildSettings()
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -75,7 +77,7 @@ func main() {
 
 	// initialize client so we can check credentials if they're provided
 	var err error
-	client, err = NewAo3Client()
+	client, err = ao3client.NewAo3Client()
 	if err != nil {
 		log.Fatal(err)
 	}

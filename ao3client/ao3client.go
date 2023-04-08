@@ -1,4 +1,4 @@
-package main
+package ao3client
 
 import (
 	"encoding/json"
@@ -9,6 +9,8 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"strings"
+
+	buildinfo "github.com/legowerewolf/AO3fetch/buildinfo"
 )
 
 type Ao3Client struct {
@@ -22,7 +24,7 @@ func NewAo3Client() (*Ao3Client, error) {
 		return nil, err
 	}
 
-	buildInfo, err := GetBuildSettings()
+	buildInfo, err := buildinfo.GetBuildSettings()
 	if err != nil {
 		return nil, err
 	}
