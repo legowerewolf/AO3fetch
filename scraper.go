@@ -5,10 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"net/url"
 	"regexp"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -16,12 +14,15 @@ import (
 	"github.com/cheggaaa/pb/v3"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gammazero/deque"
+	"github.com/legowerewolf/AO3fetch/ao3client"
+	"github.com/legowerewolf/AO3fetch/buildinfo"
 	"golang.org/x/net/html"
 )
 
 // global variables
 var (
 	isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
+	client                                           *ao3client.Ao3Client
 )
 
 func main() {
@@ -43,23 +44,12 @@ func main() {
 	// Check parameters
 
 	if showVersionAndQuit {
-		buildInfo, ok := debug.ReadBuildInfo()
-		if !ok {
-			log.Fatal("Build information not available")
+		settings, err := buildinfo.GetBuildSettings()
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		settings := make(map[string]string)
-		for _, setting := range buildInfo.Settings {
-			settings[setting.Key] = setting.Value
-		}
-
-		if settings["vcs.modified"] == "true" {
-			settings["vcs.revision"] += "+"
-		}
-
-		settings["GOARCH"] += "/" + settings["GO"+strings.ToUpper(settings["GOARCH"])]
-
-		fmt.Printf("%s:%s built by %s %s-%s\n", settings["vcs"], settings["vcs.revision"], buildInfo.GoVersion, settings["GOOS"], settings["GOARCH"])
+		fmt.Printf("%s:%s built by %s %s-%s\n", (*settings)["vcs"], (*settings)["vcs.revision.withModified"], (*settings)["GOVERSION"], (*settings)["GOOS"], (*settings)["GOARCH.withVersion"])
 
 		return
 	}
@@ -85,12 +75,19 @@ func main() {
 		log.Println("Warning: Delay is less than 10 seconds. This may cause your IP to be blocked by the server.")
 	}
 
+	// initialize client so we can check credentials if they're provided
+	var err error
+	client, err = ao3client.NewAo3Client()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if credentials != "" {
 		username, pass, _ := strings.Cut(credentials, ":")
 
 		log.Println("Logging in as " + username + "...")
 
-		err := login(username, pass)
+		err := client.Authenticate(username, pass)
 		if err != nil {
 			log.Fatal("Authentication failure. Check your credentials and try again.")
 		}
@@ -193,7 +190,7 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 	}()
 
 	// make request, handle errors
-	resp, err := http.DefaultClient.Get(toFullURL(crawlUrl))
+	resp, err := client.Get(toFullURL(crawlUrl))
 	if err != nil {
 		err := err.(*url.Error)
 
