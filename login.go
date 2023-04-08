@@ -21,7 +21,6 @@ func NewAo3Client() (*Ao3Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	client := &http.Client{Jar: jar}
 
 	buildInfo, err := GetBuildSettings()
 	if err != nil {
@@ -29,6 +28,20 @@ func NewAo3Client() (*Ao3Client, error) {
 	}
 
 	uaString := fmt.Sprintf("legowerewolf-ao3scaper/%s", (*buildInfo)["vcs.revision.withModified"])
+
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// based on default CheckRedirect function
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+
+			req.Header.Set("User-Agent", uaString)
+
+			return nil
+		},
+	}
 
 	return &Ao3Client{Client: client, UserAgentString: uaString}, nil
 }
