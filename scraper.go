@@ -146,7 +146,7 @@ func main() {
 		}
 
 		pages = highest - startPage + 1
-		log.Printf("Discovered highest page number to be %d; number of pages given start page(%d) is %d\n", highest, startPage, pages)
+		log.Printf("Discovered highest page number to be %d; number of pages given start page (%d) is %d\n", highest, startPage, pages)
 	} else if pages < 1 {
 		log.Fatal("Number of pages must be greater than 0")
 	}
@@ -230,7 +230,7 @@ func main() {
 
 	bar.Finish()
 
-	log.Println("Found", workSet.Cardinality(), "works across", pages, "pages and", seriesSet.Cardinality(), "series.")
+	log.Printf("Found %d works across %d pages and %d series.\n", workSet.Cardinality(), pages, seriesSet.Cardinality())
 	fmt.Println()
 
 	// iterate over works_set
