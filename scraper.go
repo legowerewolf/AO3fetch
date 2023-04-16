@@ -55,6 +55,7 @@ func main() {
 	}
 
 	var seedURL *url.URL
+	var startPage int
 	if seedURLRaw == "" {
 		log.Fatal("No URL provided")
 	} else {
@@ -63,10 +64,16 @@ func main() {
 		if err != nil {
 			log.Fatal("Invalid URL provided")
 		}
-	}
 
-	if pages < 1 {
-		log.Fatal("Number of pages must be greater than 0")
+		query := seedURL.Query()
+		startPage = 1
+		if query.Has("page") {
+			var err error
+			startPage, err = strconv.Atoi(query.Get("page"))
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
 	}
 
 	if delay < 0 {
@@ -95,6 +102,55 @@ func main() {
 		log.Println("Login successful.")
 	}
 
+	if pages == -1 {
+		// get number of pages from seed URL
+		log.Println("Getting number of pages...")
+
+		resp, err := client.Get(seedURL.String())
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		highest := 0
+
+		tokenizer := html.NewTokenizer(resp.Body)
+		for tt := tokenizer.Next(); tt != html.ErrorToken; tt = tokenizer.Next() {
+			token := tokenizer.Token()
+
+			if !(token.Type == html.StartTagToken && token.Data == "a") {
+				continue
+			}
+
+			href, err := getHref(token)
+			if err != nil {
+				continue
+			}
+
+			uhref, err := url.Parse(href)
+			if err != nil {
+				continue
+			}
+
+			query := uhref.Query()
+			if query.Has("page") {
+				page, err := strconv.Atoi(query.Get("page"))
+				if err != nil {
+					continue
+				}
+
+				if page > highest {
+					highest = page
+				}
+			}
+		}
+
+		pages = highest - startPage + 1
+		log.Printf("Discovered highest page number to be %d; number of pages given start page(%d) is %d\n", highest, startPage, pages)
+	} else if pages < 1 {
+		log.Fatal("Number of pages must be greater than 0")
+	}
+
 	// parameters all check out, finish initializing
 
 	// compile regexes
@@ -120,13 +176,6 @@ func main() {
 
 	// populate queue
 	query := seedURL.Query()
-	startPage := 1
-	if query.Has("page") {
-		startPage, err = strconv.Atoi(query.Get("page"))
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
 	for addlPage := 0; addlPage < pages; addlPage++ {
 		query.Set("page", strconv.Itoa(startPage+addlPage))
 		seedURL.RawQuery = query.Encode()
@@ -173,7 +222,7 @@ func main() {
 			}
 		}
 
-		// exit immediately if queue is empty
+		// exit immediately if queue is empty, do not wait for next rate limiter tick
 		if queue.Len() == 0 {
 			break
 		}
