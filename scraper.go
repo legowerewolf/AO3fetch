@@ -120,8 +120,15 @@ func main() {
 
 	// populate queue
 	query := seedURL.Query()
-	for page := 1; page <= pages; page++ {
-		query.Set("page", strconv.Itoa(page))
+	startPage := 1
+	if query.Has("page") {
+		startPage, err = strconv.Atoi(query.Get("page"))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	for addlPage := 0; addlPage < pages; addlPage++ {
+		query.Set("page", strconv.Itoa(startPage+addlPage))
 		seedURL.RawQuery = query.Encode()
 
 		queue.PushBack(seedURL.String())
