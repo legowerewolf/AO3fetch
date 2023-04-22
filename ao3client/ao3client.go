@@ -29,7 +29,7 @@ func NewAo3Client() (*Ao3Client, error) {
 		return nil, err
 	}
 
-	uaString := fmt.Sprintf("legowerewolf-ao3scaper/%s", (*buildInfo)["vcs.revision.withModified"])
+	uaString := fmt.Sprintf("legowerewolf-ao3scraper/%s", (*buildInfo)["vcs.revision.withModified"])
 
 	client := &http.Client{
 		Jar: jar,
