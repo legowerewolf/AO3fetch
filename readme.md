@@ -9,6 +9,15 @@ Tool for scraping the work URLs off of any AO3 page. Capable of navigating the
 depths of index pages. Designed for use with the
 [FanFicFare](https://github.com/JimmXinu/FanFicFare) extension for Calibre.
 
+## Notes for AO3 Maintainers
+
+- This crawler uses the user-agent string `legowerewolf-ao3scraper/\[commit\]`.
+- It rate-limits itself to 10 seconds between requests by default, although this
+  is configurable. If a user requests fewer than 10 seconds between requests, it
+  will throw a warning but proceed.
+- It will also obey `Retry-After` headers if they are set in the response.
+- I am more than happy to make changes if requested.
+
 ## Arguments
 
 - `-url` (string) URL to start crawling from
