@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -148,7 +149,7 @@ func main() {
 		pages = highest - startPage + 1
 		log.Printf("Discovered highest page number to be %d; number of pages given start page (%d) is %d\n", highest, startPage, pages)
 	} else if pages < 1 {
-		log.Fatal("Number of pages must be greater than 0")
+		log.Fatal("Number of pages must be -1, autodetect, or greater than 0.")
 	}
 
 	// parameters all check out, finish initializing
@@ -161,7 +162,7 @@ func main() {
 	// make the coordination channels, queue, and sets
 	returnedWorks := make(chan string)   // relays detected work URLs back to coordinator
 	returnedSeries := make(chan string)  // ditto for series
-	finished := make(chan bool)          // tells coordinator when a crawl is finished
+	finished := make(chan int)           // tells coordinator when a crawl is finished
 	queue := deque.New[string](pages)    // stores URLs to be crawled
 	workSet := mapset.NewSet[string]()   // stores URLs of works that have been detected
 	seriesSet := mapset.NewSet[string]() // ditto for series
@@ -210,12 +211,15 @@ func main() {
 				seriesSet.Add(series)
 				queue.PushBack(series)
 				bar.SetTotal(int64(pages + seriesSet.Cardinality()))
-			case shouldRetry := <-finished: // exit coordinator loop when crawl is finished
-				if shouldRetry {
+			case waitTime := <-finished: // exit coordinator loop when crawl is finished
+				if waitTime >= 0 { // waitTime >= 0 means we should try again later, so rotate the queue
 					queue.Rotate(1)
-				} else {
+					time.Sleep(time.Duration(waitTime) * time.Second)
+				} else if waitTime == -1 { // we were successful or got a non-retryable error, so remove the URL from the queue
 					queue.PopFront()
 					bar.Increment()
+				} else if waitTime == -2 { // Fatal error while crawling: stop crawling, dump results
+					queue.Clear()
 				}
 
 				crawlInProgress = false
@@ -230,7 +234,7 @@ func main() {
 
 	bar.Finish()
 
-	log.Printf("Found %d works across %d pages and %d series.\n", workSet.Cardinality(), pages, seriesSet.Cardinality())
+	log.Printf("Found %d works across %d pages and %d series. \n", workSet.Cardinality(), pages, seriesSet.Cardinality())
 	fmt.Println()
 
 	// iterate over works_set
@@ -239,10 +243,10 @@ func main() {
 	}
 }
 
-func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished chan bool) {
-	shouldRetry := false
-	defer func() {
-		finished <- shouldRetry
+func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished chan int) {
+	waitTime := -1 // default to no-retry finish
+	defer func() { // always send a message when we exit
+		finished <- waitTime
 	}()
 
 	// make request, handle errors
@@ -252,7 +256,7 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 
 		if err.Timeout() {
 			log.Println("Request timed out. Will retry later.", crawlUrl)
-			shouldRetry = true
+			waitTime = 0
 			return
 		}
 
@@ -260,13 +264,27 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 		return
 	}
 	defer resp.Body.Close()
+	if retryHeader := resp.Header.Get("Retry-After"); retryHeader != "" {
+		if retryTime, err := strconv.Atoi(retryHeader); err != nil {
+			waitTime = retryTime
+		} else if retryDate, err := http.ParseTime(retryHeader); err != nil {
+			waitTime = int(time.Until(retryDate).Seconds())
+		} else {
+			log.Printf("Server requested pause, but gave invalid time ('%s'). Aborting. Please file an issue. \n", retryHeader)
+			waitTime = -2
+			return
+		}
+
+		log.Printf("Server requested pause. Suspending for %d seconds. \n", waitTime)
+		return
+	}
 	if codeClass := resp.StatusCode / 100; codeClass != 2 {
 		switch codeClass {
 		case 4:
 			log.Println("Bad request. Skipping.", resp.StatusCode, crawlUrl)
 		case 5:
 			log.Println("Server error. Will retry later.", resp.StatusCode, crawlUrl)
-			shouldRetry = true
+			waitTime = 0
 		default:
 			log.Println("Unknown error. Skipping.", resp.StatusCode, crawlUrl)
 		}
