@@ -77,10 +77,8 @@ func main() {
 		}
 	}
 
-	if delay < 0 {
-		log.Fatal("Delay must be greater than or equal to 0")
-	} else if delay < 10 {
-		log.Println("Warning: Delay is less than 10 seconds. This may cause your IP to be blocked by the server.")
+	if delay < 10 {
+		log.Fatal("Delay must be greater than or equal to 10.")
 	}
 
 	// initialize client so we can check credentials if they're provided
