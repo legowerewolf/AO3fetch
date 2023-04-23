@@ -265,9 +265,9 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 	}
 	defer resp.Body.Close()
 	if retryHeader := resp.Header.Get("Retry-After"); retryHeader != "" {
-		if retryTime, err := strconv.Atoi(retryHeader); err != nil {
+		if retryTime, err := strconv.Atoi(retryHeader); err == nil {
 			waitTime = retryTime
-		} else if retryDate, err := http.ParseTime(retryHeader); err != nil {
+		} else if retryDate, err := http.ParseTime(retryHeader); err == nil {
 			waitTime = int(time.Until(retryDate).Seconds())
 		} else {
 			log.Printf("Server requested pause, but gave invalid time ('%s'). Aborting. Please file an issue. \n", retryHeader)
