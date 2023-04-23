@@ -186,7 +186,7 @@ func main() {
 
 	// set up and start progress bar
 	bar := pb.New(pages)
-	bar.SetTemplateString(`{{counters .}} {{bar . " " ("█" | green) ("█" | green) ("█" | white) " "}} {{percent .}} {{rtime .}}`)
+	bar.SetTemplateString(`{{counters .}} {{bar . " " ("█" | green) ("█" | green) ("█" | white) " "}} {{percent .}}`)
 	if showProgress {
 		bar.Start()
 	}
