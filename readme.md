@@ -12,8 +12,7 @@ depths of index pages. Designed for use with the
 ## Notes for AO3 Maintainers
 
 - This crawler uses the user-agent string `legowerewolf-ao3scraper/[commit]`.
-- The crawler enforces a maximum request rate of 1 request per 10 seconds,
-  although lower rates (more time between requests) are configurable.
+- The crawler enforces a maximum request rate of 1 request per 10 seconds.
 - It will also obey `Retry-After` headers if they are set in the response.
 - I am more than happy to make changes if requested.
 
