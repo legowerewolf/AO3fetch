@@ -105,9 +105,9 @@ func (c *Ao3Client) getAo3Token() string {
 	}
 
 	var r map[string]interface{}
-	unmarshallErr := json.Unmarshal(text, &r)
-	if unmarshallErr != nil {
-		log.Fatal(unmarshallErr)
+	unmarshalErr := json.Unmarshal(text, &r)
+	if unmarshalErr != nil {
+		log.Fatal(unmarshalErr)
 	}
 
 	return r["token"].(string)
