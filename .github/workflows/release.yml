@@ -6,7 +6,7 @@ name: Build
 on:
   push:
     paths:
-      - **.go
+      - "**.go"
       - go.mod
       - go.sum
   release:
