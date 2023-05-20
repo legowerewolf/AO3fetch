@@ -1,9 +1,14 @@
 # This workflow will build a golang project
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
 
-name: Build Release
+name: Build
 
 on:
+  push:
+    paths:
+      - **.go
+      - go.mod
+      - go.sum
   release:
     types: [released]
 
@@ -18,7 +23,8 @@ jobs:
           - platform: darwin
             arch: 386
     steps:
-      - uses: actions/checkout@v3
+      - name: Set up repo
+        uses: actions/checkout@v3
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -31,7 +37,7 @@ jobs:
           GOOS: ${{ matrix.platform }}
           GOARCH: ${{ matrix.arch }}
 
-      - name: Upload binaries
+      - name: Upload binaries to release
         run: |
           binary=(release/*)
           archive=ao3fetch-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip
@@ -39,3 +45,4 @@ jobs:
           gh release upload ${{ github.ref_name }} $archive#${{ matrix.platform }}-${{ matrix.arch }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
+        if: github.event_name == 'release'
