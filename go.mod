@@ -6,7 +6,7 @@ require (
 	github.com/cheggaaa/pb/v3 v3.1.2
 	github.com/deckarep/golang-set/v2 v2.3.0
 	github.com/gammazero/deque v0.2.1
-	golang.org/x/net v0.11.0
+	golang.org/x/net v0.12.0
 )
 
 require (
@@ -16,5 +16,5 @@ require (
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/rivo/uniseg v0.4.3 // indirect
-	golang.org/x/sys v0.9.0 // indirect
+	golang.org/x/sys v0.10.0 // indirect
 )
