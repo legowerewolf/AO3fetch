@@ -4,9 +4,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -29,7 +31,7 @@ var (
 func main() {
 	// parse flags
 	var (
-		seedURLRaw, credentials                         string
+		seedURLRaw, credentials, outputFile             string
 		pages, delay                                    int
 		includeSeries, showProgress, showVersionAndQuit bool
 	)
@@ -40,6 +42,7 @@ func main() {
 	flag.IntVar(&delay, "delay", 10, "Delay between requests")
 	flag.BoolVar(&showProgress, "progress", true, "Show progress bar")
 	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password")
+	flag.StringVar(&outputFile, "outputFile", "", "Write collected works to file instead of standard output")
 	flag.Parse()
 
 	// Check parameters
@@ -79,6 +82,16 @@ func main() {
 
 	if delay < 10 {
 		log.Fatal("Delay must be greater than or equal to 10.")
+	}
+
+	var outputFileHandle *os.File
+	if outputFile != "" {
+		var err error
+		outputFileHandle, err = os.OpenFile(outputFile, os.O_CREATE|os.O_RDWR, os.ModePerm)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer outputFileHandle.Close()
 	}
 
 	// initialize client so we can check credentials if they're provided
@@ -235,10 +248,18 @@ func main() {
 	log.Printf("Found %d works across %d pages and %d series. \n", workSet.Cardinality(), pages, seriesSet.Cardinality())
 	fmt.Println()
 
-	// iterate over works_set
-	for url := range workSet.Iter() {
-		fmt.Println(url)
+	var workOutputTarget io.Writer
+
+	if outputFileHandle != nil {
+		workOutputTarget = outputFileHandle
+	} else {
+		workOutputTarget = log.Writer()
 	}
+
+	for url := range workSet.Iter() {
+		fmt.Fprintln(workOutputTarget, url)
+	}
+
 }
 
 func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished chan int) {
