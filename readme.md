@@ -27,3 +27,5 @@ depths of index pages. Designed for use with the
 - `-series` (boolean) Include series in the crawl (default true, disable with
   `-series=false`)
 - `-version` (boolean) Show version and exit (default false)
+- `-outputFile` (string) Write the list of collected works to a file instead of
+  the terminal output.

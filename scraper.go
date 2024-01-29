@@ -35,14 +35,14 @@ func main() {
 		pages, delay                                    int
 		includeSeries, showProgress, showVersionAndQuit bool
 	)
-	flag.BoolVar(&showVersionAndQuit, "version", false, "Show version information and quit")
-	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from")
-	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl")
-	flag.BoolVar(&includeSeries, "series", true, "Include series in the crawl")
-	flag.IntVar(&delay, "delay", 10, "Delay between requests")
-	flag.BoolVar(&showProgress, "progress", true, "Show progress bar")
+	flag.BoolVar(&showVersionAndQuit, "version", false, "Show version information and quit.")
+	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from (including page number).")
+	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl. If set to -1, crawl to the end.")
+	flag.BoolVar(&includeSeries, "series", true, "Crawl discovered series.")
+	flag.IntVar(&delay, "delay", 10, "Delay between requests in seconds. Minimum 10s.")
+	flag.BoolVar(&showProgress, "progress", true, "Show progress bar.")
 	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password")
-	flag.StringVar(&outputFile, "outputFile", "", "Write collected works to file instead of standard output")
+	flag.StringVar(&outputFile, "outputFile", "", "Write collected works to file instead of standard output.")
 	flag.Parse()
 
 	// Check parameters
