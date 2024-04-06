@@ -168,7 +168,7 @@ func main() {
 	// compile regexes
 	isWorkMatcher = regexp.MustCompile(`/works/\d+`)
 	isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
-	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos`)
+	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
 
 	// make the coordination channels, queue, and sets
 	returnedWorks := make(chan string)   // relays detected work URLs back to coordinator
@@ -245,7 +245,7 @@ func main() {
 
 	bar.Finish()
 
-	log.Printf("Found %d works across %d pages and %d series. \n", workSet.Cardinality(), pages, seriesSet.Cardinality())
+	log.Printf("Found %d works across %d pages. \n", workSet.Cardinality(), pages+seriesSet.Cardinality())
 	fmt.Println()
 
 	var workOutputTarget io.Writer
@@ -333,6 +333,19 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 			returnedWorks <- toFullURL(href)
 		} else if !crawledPageIsSeries && isSeriesMatcher.MatchString(href) {
 			returnedSeries <- toFullURL(href)
+		}
+
+		if crawledPageIsSeries {
+			for _, attr := range token.Attr {
+				if attr.Key != "rel" {
+					continue
+				}
+
+				if attr.Val == "next" {
+					returnedSeries <- toFullURL(href)
+					break
+				}
+			}
 		}
 	}
 }
