@@ -1,8 +1,9 @@
 module github.com/legowerewolf/AO3fetch
 
-go 1.20
+go 1.21
 
 require (
+	github.com/andybalholm/cascadia v1.3.2
 	github.com/cheggaaa/pb/v3 v3.1.5
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/gammazero/deque v0.2.1

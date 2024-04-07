@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andybalholm/cascadia"
 	"github.com/cheggaaa/pb/v3"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gammazero/deque"
@@ -25,10 +26,17 @@ import (
 // global variables
 var (
 	isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
+	paginationSelector                               *cascadia.Selector
 	client                                           *ao3client.Ao3Client
 )
 
 func main() {
+	// compile regexes
+	isWorkMatcher = regexp.MustCompile(`/works/\d+`)
+	isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
+	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
+	*paginationSelector = cascadia.MustCompile(".pagination a")
+
 	// parse flags
 	var (
 		seedURLRaw, credentials, outputFile             string
@@ -124,37 +132,14 @@ func main() {
 		}
 		defer resp.Body.Close()
 
-		highest := 0
+		document, err := html.Parse(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-		tokenizer := html.NewTokenizer(resp.Body)
-		for tt := tokenizer.Next(); tt != html.ErrorToken; tt = tokenizer.Next() {
-			token := tokenizer.Token()
-
-			if !(token.Type == html.StartTagToken && token.Data == "a") {
-				continue
-			}
-
-			href, err := getHref(token)
-			if err != nil {
-				continue
-			}
-
-			uhref, err := url.Parse(href)
-			if err != nil {
-				continue
-			}
-
-			query := uhref.Query()
-			if query.Has("page") {
-				page, err := strconv.Atoi(query.Get("page"))
-				if err != nil {
-					continue
-				}
-
-				if page > highest {
-					highest = page
-				}
-			}
+		highest, err := getHighestPage(document)
+		if err != nil {
+			log.Fatal(err)
 		}
 
 		pages = highest - startPage + 1
@@ -165,18 +150,13 @@ func main() {
 
 	// parameters all check out, finish initializing
 
-	// compile regexes
-	isWorkMatcher = regexp.MustCompile(`/works/\d+`)
-	isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
-	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
-
 	// make the coordination channels, queue, and sets
-	returnedWorks := make(chan string)   // relays detected work URLs back to coordinator
-	returnedSeries := make(chan string)  // ditto for series
-	finished := make(chan int)           // tells coordinator when a crawl is finished
-	queue := deque.New[string](pages)    // stores URLs to be crawled
-	workSet := mapset.NewSet[string]()   // stores URLs of works that have been detected
-	seriesSet := mapset.NewSet[string]() // ditto for series
+	returnedWorks := make(chan string)        // relays detected work URLs back to coordinator
+	returnedSeries := make(chan string)       // ditto for series
+	finished := make(chan int)                // tells coordinator when a crawl is finished
+	queue := deque.New[string](pages)         // stores URLs to be crawled
+	queuedPagesSet := mapset.NewSet[string]() // stores URLs that have been added to the queue
+	workSet := mapset.NewSet[string]()        // stores URLs of works that have been detected
 
 	// initialization done, start scraping
 
@@ -187,17 +167,14 @@ func main() {
 	fmt.Println("Delay:  ", delay)
 
 	// populate queue
-	query := seedURL.Query()
-	for addlPage := 0; addlPage < pages; addlPage++ {
-		query.Set("page", strconv.Itoa(startPage+addlPage))
-		seedURL.RawQuery = query.Encode()
-
-		queue.PushBack(seedURL.String())
+	for _, page := range generatePageList(seedURL, startPage, startPage+pages-1) {
+		dedupedEnque(queue, queuedPagesSet, page)
 	}
 
 	// set up and start progress bar
 	bar := pb.New(pages)
 	bar.SetTemplateString(`{{counters .}} {{bar . " " ("█" | green) ("█" | green) ("█" | white) " "}} {{percent .}}`)
+	bar.SetTotal(int64(queuedPagesSet.Cardinality()))
 	if showProgress {
 		bar.Start()
 	}
@@ -215,13 +192,8 @@ func main() {
 					continue
 				}
 
-				if seriesSet.Contains(series) {
-					continue
-				}
-
-				seriesSet.Add(series)
-				queue.PushBack(series)
-				bar.SetTotal(int64(pages + seriesSet.Cardinality()))
+				dedupedEnque(queue, queuedPagesSet, series)
+				bar.SetTotal(int64(queuedPagesSet.Cardinality()))
 			case waitTime := <-finished: // exit coordinator loop when crawl is finished
 				if waitTime >= 0 { // waitTime >= 0 means we should try again later, so rotate the queue
 					queue.Rotate(1)
@@ -245,7 +217,7 @@ func main() {
 
 	bar.Finish()
 
-	log.Printf("Found %d works across %d pages. \n", workSet.Cardinality(), pages+seriesSet.Cardinality())
+	log.Printf("Found %d works across %d pages. \n", workSet.Cardinality(), pages+queuedPagesSet.Cardinality())
 	fmt.Println()
 
 	var workOutputTarget io.Writer
@@ -312,15 +284,16 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 
 	crawledPageIsSeries := isSeriesMatcher.MatchString(crawlUrl)
 
-	tokenizer := html.NewTokenizer(resp.Body)
-	for tt := tokenizer.Next(); tt != html.ErrorToken; tt = tokenizer.Next() {
-		token := tokenizer.Token()
+	document, err := html.Parse(resp.Body)
+	if err != nil {
+		panic("failed to parse")
+	}
 
-		if !(token.Type == html.StartTagToken && token.Data == "a") {
-			continue
-		}
+	nodeList := cascadia.QueryAll(document, cascadia.MustCompile("a"))
 
-		href, err := getHref(token)
+	for _, node := range nodeList {
+
+		href, err := getAttr(node.Attr, "href")
 		if err != nil {
 			continue
 		}
@@ -336,27 +309,78 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 		}
 
 		if crawledPageIsSeries {
-			for _, attr := range token.Attr {
-				if attr.Key != "rel" {
-					continue
-				}
+			highestPage, err := getHighestPage(document)
+			if err != nil {
+				continue
+			}
 
-				if attr.Val == "next" {
-					returnedSeries <- toFullURL(href)
-					break
-				}
+			u_crawledUrl, err := url.Parse(crawlUrl)
+			if err != nil {
+				continue
+			}
+
+			for _, page := range generatePageList(u_crawledUrl, 1, highestPage) {
+				returnedSeries <- page
 			}
 		}
 	}
 }
 
-func getHref(t html.Token) (string, error) {
-	for _, a := range t.Attr {
-		if a.Key == "href" {
+func getAttr(attrList []html.Attribute, targetAttr string) (string, error) {
+	for _, a := range attrList {
+		if a.Key == targetAttr {
 			return a.Val, nil
 		}
 	}
-	return "", errors.New("no href attribute found")
+	return "", errors.New("target attribute not found")
+}
+
+func getHighestPage(document *html.Node) (int, error) {
+
+	paginationLinks := cascadia.QueryAll(document, paginationSelector)
+
+	highest := -1
+
+	for _, link := range paginationLinks {
+
+		href, err := getAttr(link.Attr, "href")
+		if err != nil {
+			continue
+		}
+
+		url_, err := url.Parse(href)
+		if err != nil {
+			continue
+		}
+
+		if pgnum := url_.Query().Get("page"); pgnum != "" {
+			pgnum_p, err := strconv.Atoi(pgnum)
+			if err != nil {
+				continue
+			}
+
+			highest = max(highest, pgnum_p)
+		}
+	}
+
+	return highest, nil
+}
+
+func dedupedEnque[T comparable](queue *deque.Deque[T], checkSet mapset.Set[T], item T) {
+	if checkSet.Add(item) {
+		queue.PushBack(item)
+	}
+}
+
+func generatePageList(seedURL *url.URL, lowest, highest int) (result []string) {
+	query := seedURL.Query()
+	for addlPage := lowest; addlPage <= highest; addlPage++ {
+		query.Set("page", strconv.Itoa(addlPage))
+		seedURL.RawQuery = query.Encode()
+
+		result = append(result, seedURL.String())
+	}
+	return
 }
 
 func toFullURL(url_ string) string {
