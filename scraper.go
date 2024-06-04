@@ -26,16 +26,27 @@ import (
 // global variables
 var (
 	isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
-	paginationSelector                               *cascadia.Selector
+	linkSelector, paginationSelector                 cascadia.Sel
 	client                                           *ao3client.Ao3Client
 )
 
 func main() {
+	var err error
+
 	// compile regexes
 	isWorkMatcher = regexp.MustCompile(`/works/\d+`)
 	isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
 	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
-	*paginationSelector = cascadia.MustCompile(".pagination a")
+
+	linkSelector, err = cascadia.Parse("a")
+	if err != nil {
+		panic(err)
+	}
+
+	paginationSelector, err = cascadia.Parse(".pagination a")
+	if err != nil {
+		panic(err)
+	}
 
 	// parse flags
 	var (
@@ -103,7 +114,6 @@ func main() {
 	}
 
 	// initialize client so we can check credentials if they're provided
-	var err error
 	client, err = ao3client.NewAo3Client()
 	if err != nil {
 		log.Fatal(err)
@@ -289,7 +299,7 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 		panic("failed to parse")
 	}
 
-	nodeList := cascadia.QueryAll(document, cascadia.MustCompile("a"))
+	nodeList := cascadia.QueryAll(document, linkSelector)
 
 	for _, node := range nodeList {
 
