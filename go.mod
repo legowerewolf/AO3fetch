@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/cheggaaa/pb/v3 v3.1.5
-	github.com/deckarep/golang-set/v2 v2.6.0
+	github.com/deckarep/golang-set/v2 v2.7.0
 	github.com/gammazero/deque v0.2.1
 	golang.org/x/net v0.31.0
 )
