@@ -1,6 +1,8 @@
 module github.com/legowerewolf/AO3fetch
 
-go 1.20
+go 1.23
+
+toolchain go1.23.4
 
 require (
 	github.com/cheggaaa/pb/v3 v3.1.5
