@@ -1,11 +1,13 @@
 module github.com/legowerewolf/AO3fetch
 
-go 1.20
+go 1.23
+
+toolchain go1.23.4
 
 require (
 	github.com/cheggaaa/pb/v3 v3.1.5
 	github.com/deckarep/golang-set/v2 v2.7.0
-	github.com/gammazero/deque v0.2.1
+	github.com/gammazero/deque v1.0.0
 	golang.org/x/net v0.32.0
 )
 
