@@ -32,10 +32,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Build
-        run: go build -o release/
+        run: >
+          go build -o release/ -ldflags "-X
+          'github.com/legowerewolf/AO3fetch/buildinfo.RefName=$REFNAME'"
         env:
           GOOS: ${{ matrix.platform }}
           GOARCH: ${{ matrix.arch }}
+          REFNAME: ${{ github.ref_name }}
 
       - name: Upload binaries to release
         run: |
