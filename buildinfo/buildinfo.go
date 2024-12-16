@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+var RefName string
+
 func GetBuildSettings() (*map[string]string, error) {
 	buildInfo, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -23,6 +25,8 @@ func GetBuildSettings() (*map[string]string, error) {
 	if settings["vcs.modified"] == "true" {
 		settings["vcs.revision.withModified"] += "+"
 	}
+
+	settings["vcs.revision.refName"] = RefName
 
 	settings["GOARCH.withVersion"] = settings["GOARCH"] + "/" + settings["GO"+strings.ToUpper(settings["GOARCH"])]
 
