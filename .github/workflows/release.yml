@@ -18,7 +18,7 @@ jobs:
     strategy:
       matrix:
         platform: [windows, darwin, linux]
-        arch: [amd64, 386]
+        arch: [amd64, 386, arm64]
         exclude:
           - platform: darwin
             arch: 386
