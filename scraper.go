@@ -188,7 +188,7 @@ func main() {
 
 	// populate queue
 	query := seedURL.Query()
-	for addlPage := 0; addlPage < pages; addlPage++ {
+	for addlPage := range pages {
 		query.Set("page", strconv.Itoa(startPage+addlPage))
 		seedURL.RawQuery = query.Encode()
 
