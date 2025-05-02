@@ -50,7 +50,7 @@ func main() {
 	if showVersionAndQuit {
 		settings, err := buildinfo.GetBuildSettings()
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("Failed to read build info:", err)
 		}
 
 		fmt.Printf("%s (%s:%s) built by %s %s-%s\n", (*settings)["vcs.revision.refName"], (*settings)["vcs"], (*settings)["vcs.revision.withModified"], (*settings)["GOVERSION"], (*settings)["GOOS"], (*settings)["GOARCH.withVersion"])
@@ -66,7 +66,7 @@ func main() {
 		var err error
 		seedURL, err = url.Parse(seedURLRaw)
 		if err != nil {
-			log.Fatal("Invalid URL provided")
+			log.Fatal("Invalid URL provided:", seedURLRaw)
 		}
 
 		query := seedURL.Query()
@@ -75,7 +75,7 @@ func main() {
 			var err error
 			startPage, err = strconv.Atoi(query.Get("page"))
 			if err != nil {
-				log.Fatal(err)
+				log.Fatal("Failed to parse start page:", err)
 			}
 		}
 	}
@@ -89,7 +89,7 @@ func main() {
 		var err error
 		outputFileHandle, err = os.OpenFile(outputFile, os.O_CREATE|os.O_RDWR, os.ModePerm)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("Failed to open output file for writing:", err)
 		}
 		defer outputFileHandle.Close()
 	}
@@ -98,7 +98,7 @@ func main() {
 	var err error
 	client, err = ao3client.NewAo3Client()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("AO3 client initialization failed:", err)
 	}
 
 	if credentials != "" {
@@ -120,7 +120,7 @@ func main() {
 
 		resp, err := client.Get(seedURL.String())
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("Page-counting request failed:", err)
 		}
 		defer resp.Body.Close()
 
@@ -160,7 +160,7 @@ func main() {
 		pages = highest - startPage + 1
 		log.Printf("Discovered highest page number to be %d; number of pages given start page (%d) is %d\n", highest, startPage, pages)
 	} else if pages < 1 {
-		log.Fatal("Number of pages must be -1, autodetect, or greater than 0.")
+		log.Fatal("Number of pages must be -1 (autodetect) or greater than 0.")
 	}
 
 	// parameters all check out, finish initializing
@@ -362,7 +362,7 @@ func getHref(t html.Token) (string, error) {
 func toFullURL(url_ string) string {
 	url, err := url.Parse(url_)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Failed to parse URL:", err)
 	}
 
 	url.Scheme = "https"

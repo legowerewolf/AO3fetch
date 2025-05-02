@@ -93,7 +93,7 @@ func (c *Ao3Client) Authenticate(username, password string) error {
 func (c *Ao3Client) getAo3Token() string {
 	resp, apiErr := c.Get("https://archiveofourown.org/token_dispenser.json")
 	if apiErr != nil {
-		log.Fatal(apiErr)
+		log.Fatal("Token request failed:", apiErr)
 	}
 	if resp.Body != nil {
 		defer resp.Body.Close()
@@ -101,13 +101,13 @@ func (c *Ao3Client) getAo3Token() string {
 
 	text, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		log.Fatal(readErr)
+		log.Fatal("Token read failed:", readErr)
 	}
 
 	var r map[string]interface{}
 	unmarshalErr := json.Unmarshal(text, &r)
 	if unmarshalErr != nil {
-		log.Fatal(unmarshalErr)
+		log.Fatal("Token parse failed:", unmarshalErr)
 	}
 
 	return r["token"].(string)
