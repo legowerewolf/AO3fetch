@@ -50,7 +50,7 @@ func main() {
 	if showVersionAndQuit {
 		settings, err := buildinfo.GetBuildSettings()
 		if err != nil {
-			log.Fatal("Failed to read build info:", err)
+			log.Fatal("Failed to read build info: ", err)
 		}
 
 		fmt.Printf("%s (%s:%s) built by %s %s-%s\n", (*settings)["vcs.revision.refName"], (*settings)["vcs"], (*settings)["vcs.revision.withModified"], (*settings)["GOVERSION"], (*settings)["GOOS"], (*settings)["GOARCH.withVersion"])
@@ -66,7 +66,7 @@ func main() {
 		var err error
 		seedURL, err = url.Parse(seedURLRaw)
 		if err != nil {
-			log.Fatal("Invalid URL provided:", seedURLRaw)
+			log.Fatal("Invalid URL provided: ", seedURLRaw)
 		}
 
 		query := seedURL.Query()
@@ -75,7 +75,7 @@ func main() {
 			var err error
 			startPage, err = strconv.Atoi(query.Get("page"))
 			if err != nil {
-				log.Fatal("Failed to parse start page:", err)
+				log.Fatal("Failed to parse start page: ", err)
 			}
 		}
 	}
@@ -89,16 +89,16 @@ func main() {
 		var err error
 		outputFileHandle, err = os.OpenFile(outputFile, os.O_CREATE|os.O_RDWR, os.ModePerm)
 		if err != nil {
-			log.Fatal("Failed to open output file for writing:", err)
+			log.Fatal("Failed to open output file for writing: ", err)
 		}
 		defer outputFileHandle.Close()
 	}
 
 	// initialize client so we can check credentials if they're provided
 	var err error
-	client, err = ao3client.NewAo3Client()
+	client, err = ao3client.NewAo3Client(seedURLRaw)
 	if err != nil {
-		log.Fatal("AO3 client initialization failed:", err)
+		log.Fatal("AO3 client initialization failed: ", err)
 	}
 
 	if credentials != "" {
@@ -120,7 +120,7 @@ func main() {
 
 		resp, err := client.Get(seedURL.String())
 		if err != nil {
-			log.Fatal("Page-counting request failed:", err)
+			log.Fatal("Page-counting request failed: ", err)
 		}
 		defer resp.Body.Close()
 
@@ -180,10 +180,10 @@ func main() {
 
 	// initialization done, start scraping
 
-	log.Println("Scrape parameters:")
+	log.Println("Scrape parameters: ")
 	fmt.Println("URL:    ", seedURL)
 	fmt.Println("Pages:  ", pages)
-	fmt.Println("Series?:", includeSeries)
+	fmt.Println("Series?: ", includeSeries)
 	fmt.Println("Delay:  ", delay)
 
 	// populate queue
@@ -269,7 +269,7 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 	}()
 
 	// make request, handle errors
-	resp, err := client.Get(toFullURL(crawlUrl))
+	resp, err := client.Get(crawlUrl)
 	if err != nil {
 		err := err.(*url.Error)
 
@@ -330,9 +330,9 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 		}
 
 		if isWorkMatcher.MatchString(href) {
-			returnedWorks <- toFullURL(href)
+			returnedWorks <- client.ToFullURL(href)
 		} else if !crawledPageIsSeries && isSeriesMatcher.MatchString(href) {
-			returnedSeries <- toFullURL(href)
+			returnedSeries <- client.ToFullURL(href)
 		}
 
 		if crawledPageIsSeries {
@@ -342,7 +342,7 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 				}
 
 				if attr.Val == "next" {
-					returnedSeries <- toFullURL(href)
+					returnedSeries <- client.ToFullURL(href)
 					break
 				}
 			}
@@ -357,16 +357,4 @@ func getHref(t html.Token) (string, error) {
 		}
 	}
 	return "", errors.New("no href attribute found")
-}
-
-func toFullURL(url_ string) string {
-	url, err := url.Parse(url_)
-	if err != nil {
-		log.Fatal("Failed to parse URL:", err)
-	}
-
-	url.Scheme = "https"
-	url.Host = "archiveofourown.org"
-
-	return url.String()
 }
