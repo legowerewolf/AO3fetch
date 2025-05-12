@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cheggaaa/pb/v3"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gammazero/deque"
 	"github.com/legowerewolf/AO3fetch/ao3client"
@@ -31,16 +30,15 @@ var (
 func main() {
 	// parse flags
 	var (
-		seedURLRaw, credentials, outputFile             string
-		pages, delay                                    int
-		includeSeries, showProgress, showVersionAndQuit bool
+		seedURLRaw, credentials, outputFile string
+		pages, delay                        int
+		includeSeries, showVersionAndQuit   bool
 	)
 	flag.BoolVar(&showVersionAndQuit, "version", false, "Show version information and quit.")
 	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from (including page number).")
 	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl. If set to -1, crawl to the end.")
 	flag.BoolVar(&includeSeries, "series", true, "Crawl discovered series.")
 	flag.IntVar(&delay, "delay", 10, "Delay between requests in seconds. Minimum 10s.")
-	flag.BoolVar(&showProgress, "progress", true, "Show progress bar.")
 	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password")
 	flag.StringVar(&outputFile, "outputFile", "", "Write collected works to file instead of standard output.")
 	flag.Parse()
@@ -195,13 +193,6 @@ func main() {
 		queue.PushBack(seedURL.String())
 	}
 
-	// set up and start progress bar
-	bar := pb.New(pages)
-	bar.SetTemplateString(`{{counters .}} {{bar . " " ("█" | green) ("█" | green) ("█" | white) " "}} {{percent .}}`)
-	if showProgress {
-		bar.Start()
-	}
-
 	for rateLimiter := time.Tick(time.Duration(delay) * time.Second); queue.Len() > 0; <-rateLimiter {
 		go crawl(queue.Front(), returnedWorks, returnedSeries, finished)
 
@@ -221,14 +212,14 @@ func main() {
 
 				seriesSet.Add(series)
 				queue.PushBack(series)
-				bar.SetTotal(int64(pages + seriesSet.Cardinality()))
+
 			case waitTime := <-finished: // exit coordinator loop when crawl is finished
 				if waitTime >= 0 { // waitTime >= 0 means we should try again later, so rotate the queue
 					queue.Rotate(1)
 					time.Sleep(time.Duration(waitTime) * time.Second)
 				} else if waitTime == -1 { // we were successful or got a non-retryable error, so remove the URL from the queue
 					queue.PopFront()
-					bar.Increment()
+
 				} else if waitTime == -2 { // Fatal error while crawling: stop crawling, dump results
 					queue.Clear()
 				}
@@ -242,8 +233,6 @@ func main() {
 			break
 		}
 	}
-
-	bar.Finish()
 
 	log.Printf("Found %d works across %d pages. \n", workSet.Cardinality(), pages+seriesSet.Cardinality())
 	fmt.Println()
