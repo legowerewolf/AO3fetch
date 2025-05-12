@@ -176,15 +176,7 @@ func main() {
 	workSet := mapset.NewSet[string]()   // stores URLs of works that have been detected
 	seriesSet := mapset.NewSet[string]() // ditto for series
 
-	// initialization done, start scraping
-
-	log.Println("Scrape parameters: ")
-	fmt.Println("URL:    ", seedURL)
-	fmt.Println("Pages:  ", pages)
-	fmt.Println("Series?: ", includeSeries)
-	fmt.Println("Delay:  ", delay)
-
-	// populate queue
+	// populate queue with initial pages
 	query := seedURL.Query()
 	for addlPage := range pages {
 		query.Set("page", strconv.Itoa(startPage+addlPage))
@@ -192,6 +184,14 @@ func main() {
 
 		queue.PushBack(seedURL.String())
 	}
+
+	// initialization done, start scraping
+
+	log.Println("Scrape parameters: ")
+	fmt.Println("URL:    ", seedURL)
+	fmt.Println("Pages:  ", pages)
+	fmt.Println("Series?: ", includeSeries)
+	fmt.Println("Delay:  ", delay)
 
 	for rateLimiter := time.Tick(time.Duration(delay) * time.Second); queue.Len() > 0; <-rateLimiter {
 		go crawl(queue.Front(), returnedWorks, returnedSeries, finished)
