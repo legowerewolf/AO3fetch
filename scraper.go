@@ -169,9 +169,6 @@ func main() {
 	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
 
 	// make the coordination channels, queue, and sets
-	returnedWorks := make(chan string)   // relays detected work URLs back to coordinator
-	returnedSeries := make(chan string)  // ditto for series
-	finished := make(chan int)           // tells coordinator when a crawl is finished
 	var queue deque.Deque[string]        // stores URLs to be crawled
 	workSet := mapset.NewSet[string]()   // stores URLs of works that have been detected
 	seriesSet := mapset.NewSet[string]() // ditto for series
@@ -194,38 +191,45 @@ func main() {
 	fmt.Println("Delay:  ", delay)
 
 	for rateLimiter := time.Tick(time.Duration(delay) * time.Second); queue.Len() > 0; <-rateLimiter {
-		go crawl(queue.Front(), returnedWorks, returnedSeries, finished)
+		crawlResponse := crawl(queue.Front())
 
-		// "the coordinator"
-		for crawlInProgress := true; crawlInProgress; {
-			select {
-			case work := <-returnedWorks: // save detected works
-				workSet.Add(work)
-			case series := <-returnedSeries: // save detected series, add unique series to queue
-				if !includeSeries {
-					continue
+		if crawlResponse.Success {
+			queue.PopFront()
+
+			workSet.Append(crawlResponse.AddWorks...)
+
+			if includeSeries {
+
+				for _, crawlable := range crawlResponse.AddSeries {
+					if seriesSet.Contains(crawlable) {
+						continue
+					}
+
+					seriesSet.Add(crawlable)
+					queue.PushBack(crawlable)
+
 				}
 
-				if seriesSet.Contains(series) {
-					continue
-				}
-
-				seriesSet.Add(series)
-				queue.PushBack(series)
-
-			case waitTime := <-finished: // exit coordinator loop when crawl is finished
-				if waitTime >= 0 { // waitTime >= 0 means we should try again later, so rotate the queue
-					queue.Rotate(1)
-					time.Sleep(time.Duration(waitTime) * time.Second)
-				} else if waitTime == -1 { // we were successful or got a non-retryable error, so remove the URL from the queue
-					queue.PopFront()
-
-				} else if waitTime == -2 { // Fatal error while crawling: stop crawling, dump results
-					queue.Clear()
-				}
-
-				crawlInProgress = false
 			}
+
+		} else {
+
+			// log message
+
+			if crawlResponse.Retryable {
+				queue.Rotate(1)
+			} else {
+				queue.PopFront()
+			}
+
+			if crawlResponse.Fatal {
+				queue.Clear()
+			}
+
+			if (crawlResponse.WaitFor > 0) && (queue.Len() > 0) {
+				time.Sleep(time.Duration(crawlResponse.WaitFor) * time.Second)
+			}
+
 		}
 
 		// exit immediately if queue is empty, do not wait for next rate limiter tick
@@ -251,11 +255,23 @@ func main() {
 
 }
 
-func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished chan int) {
-	waitTime := -1 // default to no-retry finish
-	defer func() { // always send a message when we exit
-		finished <- waitTime
-	}()
+type crawlResponse struct {
+	CrawlUrl string
+	Success  bool
+
+	// fail fields
+	Retryable bool
+	Fatal     bool
+	ErrMsg    string
+	WaitFor   int // seconds
+
+	// success fields
+	AddWorks  []string
+	AddSeries []string
+}
+
+func crawl(crawlUrl string) (cr crawlResponse) {
+	cr.CrawlUrl = crawlUrl
 
 	// make request, handle errors
 	resp, err := client.Get(crawlUrl)
@@ -263,38 +279,44 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 		err := err.(*url.Error)
 
 		if err.Timeout() {
-			log.Println("Request timed out. Will retry later.", crawlUrl)
-			waitTime = 0
+			cr.Retryable = true
+			cr.ErrMsg = "Request timed out."
 			return
 		}
 
-		log.Println("Unknown error. Skipping.", err.Error(), crawlUrl)
+		cr.ErrMsg = fmt.Sprint("Unknown error: ", err.Error())
 		return
 	}
 	defer resp.Body.Close()
+
+	// handle retry header
 	if retryHeader := resp.Header.Get("Retry-After"); retryHeader != "" {
 		if retryTime, err := strconv.Atoi(retryHeader); err == nil {
-			waitTime = retryTime
+			cr.WaitFor = retryTime
 		} else if retryDate, err := http.ParseTime(retryHeader); err == nil {
-			waitTime = int(time.Until(retryDate).Seconds())
+			cr.WaitFor = int(time.Until(retryDate).Seconds())
 		} else {
-			log.Printf("Server requested pause, but gave invalid time ('%s'). Aborting. Please file an issue. \n", retryHeader)
-			waitTime = -2
+			cr.ErrMsg = fmt.Sprintf("Server requested pause, but gave invalid time ('%s').", retryHeader)
+			cr.Fatal = true
 			return
 		}
 
-		log.Printf("Server requested pause. Suspending for %d seconds. \n", waitTime)
+		cr.ErrMsg = fmt.Sprintf("Server requested pause. Suspending for %d seconds.", cr.WaitFor)
+		cr.Retryable = true
 		return
 	}
+
+	// handle non-2xx status codes
 	if codeClass := resp.StatusCode / 100; codeClass != 2 {
 		switch codeClass {
 		case 4:
-			log.Println("Bad request. Skipping.", resp.StatusCode, crawlUrl)
+			cr.ErrMsg = fmt.Sprintf("Bad request (%d).", resp.StatusCode)
 		case 5:
-			log.Println("Server error. Will retry later.", resp.StatusCode, crawlUrl)
-			waitTime = 0
+
+			cr.ErrMsg = fmt.Sprintf("Server error (%d).", resp.StatusCode)
+			cr.Retryable = true
 		default:
-			log.Println("Unknown error. Skipping.", resp.StatusCode, crawlUrl)
+			cr.ErrMsg = fmt.Sprintf("Got unexpected status code %d.", resp.StatusCode)
 		}
 		return
 	}
@@ -319,9 +341,9 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 		}
 
 		if isWorkMatcher.MatchString(href) {
-			returnedWorks <- client.ToFullURL(href)
+			cr.AddWorks = append(cr.AddWorks, client.ToFullURL(href))
 		} else if !crawledPageIsSeries && isSeriesMatcher.MatchString(href) {
-			returnedSeries <- client.ToFullURL(href)
+			cr.AddSeries = append(cr.AddSeries, client.ToFullURL(href))
 		}
 
 		if crawledPageIsSeries {
@@ -331,12 +353,15 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 				}
 
 				if attr.Val == "next" {
-					returnedSeries <- client.ToFullURL(href)
+					cr.AddSeries = append(cr.AddSeries, client.ToFullURL(href))
 					break
 				}
 			}
 		}
 	}
+
+	cr.Success = true
+	return
 }
 
 func getHref(t html.Token) (string, error) {
