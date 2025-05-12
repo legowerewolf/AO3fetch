@@ -185,10 +185,10 @@ func main() {
 	// initialization done, start scraping
 
 	log.Println("Scrape parameters: ")
-	fmt.Println("URL:    ", seedURL)
-	fmt.Println("Pages:  ", pages)
+	fmt.Println("URL:     ", seedURL)
+	fmt.Println("Pages:   ", pages)
 	fmt.Println("Series?: ", includeSeries)
-	fmt.Println("Delay:  ", delay)
+	fmt.Println("Delay:   ", delay)
 
 	for rateLimiter := time.Tick(time.Duration(delay) * time.Second); queue.Len() > 0; <-rateLimiter {
 		crawlResponse := crawl(queue.Front())
