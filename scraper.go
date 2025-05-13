@@ -25,10 +25,11 @@ import (
 )
 
 // global variables
-var (
-	isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
-	client                                           *ao3client.Ao3Client
-)
+var client *ao3client.Ao3Client
+
+var isWorkMatcher = regexp.MustCompile(`/works/\d+`)
+var isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
+var isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
 
 func main() {
 	// parse flags
@@ -165,23 +166,6 @@ func main() {
 	}
 
 	// parameters all check out, finish initializing
-
-	// compile regexes
-	isWorkMatcher = regexp.MustCompile(`/works/\d+`)
-	isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
-	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
-
-	// make the coordination channels, queue, and sets
-	var queue deque.Deque[string]
-
-	// populate queue with initial pages
-	query := seedURL.Query()
-	for addlPage := range pages {
-		query.Set("page", strconv.Itoa(startPage+addlPage))
-		seedURL.RawQuery = query.Encode()
-
-		queue.PushBack(seedURL.String())
-	}
 
 	// initialization done, start scraping
 
