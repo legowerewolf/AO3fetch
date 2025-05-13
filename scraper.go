@@ -179,6 +179,7 @@ func main() {
 	p := tea.NewProgram(initRuntimeModel(includeSeries, delay, *seedURL, startPage, pages), tea.WithAltScreen())
 
 	r, err := p.Run()
+	fmt.Print(progressCode(0, 0))
 	if err != nil {
 		log.Fatal("Tea program quit: ", err)
 	}
@@ -243,7 +244,8 @@ func (m runtimeModel) View() string {
 		percent = float64(m.pagesCrawled) / float64(m.pagesCrawled+m.queue.Len())
 	}
 
-	return m.prog.ViewAs(percent) + "\n" +
+	return progressCode(1, percent) +
+		m.prog.ViewAs(percent) + "\n" +
 		fmt.Sprintln("Countdown time:", m.secsToNextCrawl) +
 		fmt.Sprintln("Works discovered:", m.workSet.Cardinality()) +
 		fmt.Sprintln("Pages:", m.pagesCrawled) +
@@ -455,4 +457,8 @@ func getHref(t html.Token) (string, error) {
 		}
 	}
 	return "", errors.New("no href attribute found")
+}
+
+func progressCode(state int, progress float64) string {
+	return "\x1b]9;4;" + strconv.Itoa(state) + ";" + strconv.Itoa(int(progress*100)) + "\x07"
 }
