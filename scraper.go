@@ -14,11 +14,14 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/html"
+
+	tea "github.com/charmbracelet/bubbletea"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gammazero/deque"
+
 	"github.com/legowerewolf/AO3fetch/ao3client"
 	"github.com/legowerewolf/AO3fetch/buildinfo"
-	"golang.org/x/net/html"
 )
 
 // global variables
@@ -190,55 +193,21 @@ func main() {
 	fmt.Println("Series?: ", includeSeries)
 	fmt.Println("Delay:   ", delay)
 
-	for rateLimiter := time.Tick(time.Duration(delay) * time.Second); queue.Len() > 0; <-rateLimiter {
-		crawlResponse := crawl(queue.Front())
+	p := tea.NewProgram(runtimeModel{
+		includeSeries: includeSeries,
+		delay:         delay,
 
-		if crawlResponse.Success {
-			queue.PopFront()
+		queue:     queue,
+		workSet:   workSet,
+		seriesSet: seriesSet,
+	}, tea.WithAltScreen())
 
-			workSet.Append(crawlResponse.AddWorks...)
-
-			if includeSeries {
-
-				for _, crawlable := range crawlResponse.AddSeries {
-					if seriesSet.Contains(crawlable) {
-						continue
-					}
-
-					seriesSet.Add(crawlable)
-					queue.PushBack(crawlable)
-
-				}
-
-			}
-
-		} else {
-
-			// log message
-
-			if crawlResponse.Retryable {
-				queue.Rotate(1)
-			} else {
-				queue.PopFront()
-			}
-
-			if crawlResponse.Fatal {
-				queue.Clear()
-			}
-
-			if (crawlResponse.WaitFor > 0) && (queue.Len() > 0) {
-				time.Sleep(time.Duration(crawlResponse.WaitFor) * time.Second)
-			}
-
-		}
-
-		// exit immediately if queue is empty, do not wait for next rate limiter tick
-		if queue.Len() == 0 {
-			break
-		}
+	r, err := p.Run()
+	if err != nil {
+		log.Fatal("Tea program quit: ", err)
 	}
 
-	log.Printf("Found %d works across %d pages. \n", workSet.Cardinality(), pages+seriesSet.Cardinality())
+	log.Printf("Found %d works across %d pages. \n", workSet.Cardinality(), r.(runtimeModel).pagesCrawled)
 	fmt.Println()
 
 	var workOutputTarget io.Writer
@@ -255,7 +224,25 @@ func main() {
 
 }
 
-type crawlResponse struct {
+type runtimeModel struct {
+	includeSeries bool
+	delay         int
+
+	queue     deque.Deque[string]
+	workSet   mapset.Set[string]
+	seriesSet mapset.Set[string]
+
+	secsToNextCrawl int
+	pagesCrawled    int
+}
+
+func (m runtimeModel) View() string {
+	return fmt.Sprintf("Countdown time: %d\nWorks: %d\nPages: %d\nQueue length: %d\nTotal: %d", m.secsToNextCrawl, m.workSet.Cardinality(), m.pagesCrawled, m.queue.Len(), m.pagesCrawled+m.queue.Len())
+}
+
+type tickMsg struct{}
+
+type crawlResponseMsg struct {
 	CrawlUrl string
 	Success  bool
 
@@ -270,7 +257,91 @@ type crawlResponse struct {
 	AddSeries []string
 }
 
-func crawl(crawlUrl string) (cr crawlResponse) {
+func (m runtimeModel) Init() tea.Cmd {
+
+	return func() tea.Msg {
+		return tickMsg{}
+	}
+}
+
+func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := message.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "esc", "ctrl+c":
+			return m, tea.Quit
+		}
+
+	case tickMsg:
+		// queue empty, quit
+		if m.queue.Len() == 0 {
+			return m, tea.Quit
+		}
+
+		m.secsToNextCrawl--
+		if m.secsToNextCrawl <= 0 {
+			// start a crawl
+			toCrawl := m.queue.PopFront()
+
+			return m, func() tea.Msg {
+				return crawl(toCrawl)
+			}
+
+		}
+
+		return m, tick()
+
+	case crawlResponseMsg:
+		if msg.Success {
+			m.pagesCrawled++
+
+			m.workSet.Append(msg.AddWorks...)
+
+			if m.includeSeries {
+
+				for _, crawlable := range msg.AddSeries {
+					if m.seriesSet.Contains(crawlable) {
+						continue
+					}
+
+					m.seriesSet.Add(crawlable)
+					m.queue.PushBack(crawlable)
+
+				}
+
+			}
+
+			m.secsToNextCrawl = m.delay
+
+			return m, tick()
+		}
+
+		log.Println(msg)
+
+		if msg.Retryable {
+			m.queue.PushBack(msg.CrawlUrl)
+		}
+
+		if msg.Fatal {
+			return m, tea.Quit
+		}
+
+		m.secsToNextCrawl = max(msg.WaitFor, m.delay)
+
+		return m, tick()
+
+	}
+
+	return m, nil
+}
+
+func tick() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return tickMsg{}
+	})
+}
+
+func crawl(crawlUrl string) (cr crawlResponseMsg) {
 	cr.CrawlUrl = crawlUrl
 
 	// make request, handle errors
