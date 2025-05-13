@@ -172,9 +172,7 @@ func main() {
 	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
 
 	// make the coordination channels, queue, and sets
-	var queue deque.Deque[string]        // stores URLs to be crawled
-	workSet := mapset.NewSet[string]()   // stores URLs of works that have been detected
-	seriesSet := mapset.NewSet[string]() // ditto for series
+	var queue deque.Deque[string]
 
 	// populate queue with initial pages
 	query := seedURL.Query()
@@ -193,21 +191,16 @@ func main() {
 	fmt.Println("Series?: ", includeSeries)
 	fmt.Println("Delay:   ", delay)
 
-	p := tea.NewProgram(runtimeModel{
-		includeSeries: includeSeries,
-		delay:         delay,
-
-		queue:     queue,
-		workSet:   workSet,
-		seriesSet: seriesSet,
-	}, tea.WithAltScreen())
+	p := tea.NewProgram(initRuntimeModel(includeSeries, delay, *seedURL, startPage, pages), tea.WithAltScreen())
 
 	r, err := p.Run()
 	if err != nil {
 		log.Fatal("Tea program quit: ", err)
 	}
 
-	log.Printf("Found %d works across %d pages. \n", workSet.Cardinality(), r.(runtimeModel).pagesCrawled)
+	rModel := r.(runtimeModel)
+
+	log.Printf("Found %d works across %d pages. \n", rModel.workSet.Cardinality(), rModel.pagesCrawled)
 	fmt.Println()
 
 	var workOutputTarget io.Writer
@@ -218,7 +211,7 @@ func main() {
 		workOutputTarget = log.Writer()
 	}
 
-	for url := range workSet.Iter() {
+	for url := range rModel.workSet.Iter() {
 		fmt.Fprintln(workOutputTarget, url)
 	}
 
@@ -228,12 +221,30 @@ type runtimeModel struct {
 	includeSeries bool
 	delay         int
 
-	queue     deque.Deque[string]
-	workSet   mapset.Set[string]
-	seriesSet mapset.Set[string]
+	queue     deque.Deque[string] // stores URLs to be crawled
+	workSet   mapset.Set[string]  // stores URLs of works that have been detected
+	seriesSet mapset.Set[string]  // ditto for series
 
 	secsToNextCrawl int
 	pagesCrawled    int
+}
+
+func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, startPage int, pages int) (m runtimeModel) {
+	m.includeSeries = includeSeries
+	m.delay = delay
+
+	m.workSet = mapset.NewSet[string]()
+	m.seriesSet = mapset.NewSet[string]()
+
+	query := seedURL.Query()
+	for addlPage := range pages {
+		query.Set("page", strconv.Itoa(startPage+addlPage))
+		seedURL.RawQuery = query.Encode()
+
+		m.queue.PushBack(seedURL.String())
+	}
+
+	return
 }
 
 func (m runtimeModel) View() string {
