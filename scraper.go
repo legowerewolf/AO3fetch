@@ -273,11 +273,6 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tickMsg:
-		// queue empty, quit
-		if m.queue.Len() == 0 {
-			return m, tea.Quit
-		}
-
 		m.secsToNextCrawl--
 		if m.secsToNextCrawl <= 0 {
 			// start a crawl
@@ -313,20 +308,22 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.secsToNextCrawl = m.delay
 
-			return m, tick()
+		} else {
+			if msg.Retryable {
+				m.queue.PushBack(msg.CrawlUrl)
+			}
+
+			if msg.Fatal {
+				return m, tea.Quit
+			}
+
+			m.secsToNextCrawl = max(msg.WaitFor, m.delay)
 		}
 
-		log.Println(msg)
-
-		if msg.Retryable {
-			m.queue.PushBack(msg.CrawlUrl)
-		}
-
-		if msg.Fatal {
+		// queue empty, quit
+		if m.queue.Len() == 0 {
 			return m, tea.Quit
 		}
-
-		m.secsToNextCrawl = max(msg.WaitFor, m.delay)
 
 		return m, tick()
 
