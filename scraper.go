@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gammazero/deque"
@@ -211,6 +212,8 @@ type runtimeModel struct {
 
 	secsToNextCrawl int
 	pagesCrawled    int
+
+	prog progress.Model
 }
 
 func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, startPage int, pages int) (m runtimeModel) {
@@ -228,11 +231,24 @@ func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, startPage 
 		m.queue.PushBack(seedURL.String())
 	}
 
+	m.prog = progress.New()
+
 	return
 }
 
 func (m runtimeModel) View() string {
-	return fmt.Sprintf("Countdown time: %d\nWorks: %d\nPages: %d\nQueue length: %d\nTotal: %d", m.secsToNextCrawl, m.workSet.Cardinality(), m.pagesCrawled, m.queue.Len(), m.pagesCrawled+m.queue.Len())
+
+	var percent float64 = 0
+	if m.pagesCrawled > 0 {
+		percent = float64(m.pagesCrawled) / float64(m.pagesCrawled+m.queue.Len())
+	}
+
+	return m.prog.ViewAs(percent) + "\n" +
+		fmt.Sprintln("Countdown time:", m.secsToNextCrawl) +
+		fmt.Sprintln("Works discovered:", m.workSet.Cardinality()) +
+		fmt.Sprintln("Pages:", m.pagesCrawled) +
+		fmt.Sprintln("Queue length:", m.queue.Len()) +
+		fmt.Sprintln("Total:", m.pagesCrawled+m.queue.Len())
 }
 
 type tickMsg struct{}
@@ -266,6 +282,11 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "esc", "ctrl+c":
 			return m, tea.Quit
 		}
+
+	case tea.WindowSizeMsg:
+		m.prog.Width = msg.Width
+
+		return m, nil
 
 	case tickMsg:
 		m.secsToNextCrawl--
