@@ -274,13 +274,24 @@ func (m runtimeModel) View() string {
 	}
 	eta = eta.Add(m.delay * time.Duration(m.queue.Len()-1))
 
+	totalPages := m.pagesCrawled + m.queue.Len()
+	if m.crawlInProgress {
+		totalPages += 1
+	}
+
+	series := "Ignoring series"
+	if m.includeSeries {
+		series = fmt.Sprintf("Series discovered: %d", m.seriesSet.Cardinality())
+	}
+
 	stats := []string{
 		currentAction,
 		fmt.Sprintf("ETA: %s", eta.Local().Format("15:04:05")),
 		fmt.Sprintf("Works discovered: %d", m.workSet.Cardinality()),
+		series,
 		fmt.Sprintf("To crawl: %d", m.queue.Len()),
 		fmt.Sprintf("Crawled: %d", m.pagesCrawled),
-		fmt.Sprintf("Total: %d", m.pagesCrawled+m.queue.Len()),
+		fmt.Sprintf("Total pages: %d", totalPages),
 	}
 
 	statBlock := lipgloss.NewStyle().
@@ -294,20 +305,28 @@ func (m runtimeModel) View() string {
 		Width(25).
 		Render(strings.Join(stats, "\n"))
 
+	// add help message
+	helpMsg := lipgloss.NewStyle().
+		Faint(true).
+		Render("abort: esc / ctrl+c")
+
+	// group stat block and help message into column
+	leftCol := lipgloss.JoinVertical(lipgloss.Center, statBlock, helpMsg)
+
 	// logs
 	logStartPoint := 0
-	lLinesAvailable := max(remainingLines(m, &doc), lipgloss.Height(statBlock))
+	lLinesAvailable := max(remainingLines(m, &doc), lipgloss.Height(leftCol))
 	if len(m.logs) > lLinesAvailable {
 		logStartPoint = len(m.logs) - lLinesAvailable
 	}
 	logLines := m.logs[logStartPoint:]
 
 	logBlock := lipgloss.NewStyle().
-		MaxWidth(m.width - lipgloss.Width(statBlock)).
+		MaxWidth(m.width - lipgloss.Width(leftCol)).
 		Render(strings.Join(logLines, "\n"))
 
 	// group stats and logs
-	doc.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, statBlock, logBlock) + "\n")
+	doc.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftCol, logBlock) + "\n")
 
 	// write everything to screen
 	return doc.String()
@@ -339,7 +358,7 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "esc", "ctrl+c":
+		case "esc", "ctrl+c":
 			return m, tea.Quit
 		}
 
@@ -485,7 +504,6 @@ func crawl(crawlUrl string) (cr crawlResponseMsg) {
 		case 4:
 			cr.ErrMsg = fmt.Sprintf("Bad request (%d).", resp.StatusCode)
 		case 5:
-
 			cr.ErrMsg = fmt.Sprintf("Server error (%d).", resp.StatusCode)
 			cr.Retryable = true
 		default:
