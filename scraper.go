@@ -268,8 +268,15 @@ func (m runtimeModel) View() string {
 		currentAction = fmt.Sprintf("Sleeping %s", time.Until(m.nextCrawlTime).Round(time.Second).String())
 	}
 
+	eta := m.nextCrawlTime
+	if m.crawlInProgress {
+		eta = time.Now()
+	}
+	eta = eta.Add(m.delay * time.Duration(m.queue.Len()-1))
+
 	stats := []string{
 		currentAction,
+		fmt.Sprintf("ETA: %s", eta.Local().Format("15:04:05")),
 		fmt.Sprintf("Works discovered: %d", m.workSet.Cardinality()),
 		fmt.Sprintf("To crawl: %d", m.queue.Len()),
 		fmt.Sprintf("Crawled: %d", m.pagesCrawled),
