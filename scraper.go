@@ -371,13 +371,11 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.prog.Width = msg.Width
 
 		return m, nil
-
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
 		return m, cmd
 	case tickMsg:
-
 		if !m.crawlInProgress && m.nextCrawlTime.Compare(time.Now()) == -1 {
 			// start a crawl
 			toCrawl := m.queue.PopFront()
@@ -387,13 +385,10 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				tick(),
 				startCrawl(toCrawl),
 			)
-
 		}
 
 		return m, tick()
-
 	case crawlResponseMsg:
-
 		if msg.Fatal {
 			return m, tea.Quit
 		}
@@ -407,7 +402,6 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.workSet.Append(msg.AddWorks...)
 
 			if m.includeSeries {
-
 				for _, crawlable := range msg.AddSeries {
 					if m.seriesSet.Contains(crawlable) {
 						continue
@@ -415,13 +409,9 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 					m.seriesSet.Add(crawlable)
 					m.queue.PushBack(crawlable)
-
 				}
-
 			}
-
 		} else {
-
 			logmsg := time.Now().Local().Format("15:04:05") + " " + msg.ErrMsg
 
 			if msg.WaitFor > 0 {
@@ -446,7 +436,6 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		return m, nil
-
 	}
 
 	return m, nil
