@@ -17,6 +17,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	mapset "github.com/deckarep/golang-set/v2"
@@ -206,25 +207,27 @@ func main() {
 
 type runtimeModel struct {
 	includeSeries bool
-	delay         int
+	delay         time.Duration
 
 	queue     deque.Deque[string] // stores URLs to be crawled
 	workSet   mapset.Set[string]  // stores URLs of works that have been detected
 	seriesSet mapset.Set[string]  // ditto for series
 
-	secsToNextCrawl int
+	nextCrawlTime   time.Time
+	crawlInProgress bool
 	pagesCrawled    int
 
 	width  int
 	height int
 
 	prog progress.Model
+	spin spinner.Model
 	logs []string
 }
 
 func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, startPage int, pages int) (m runtimeModel) {
 	m.includeSeries = includeSeries
-	m.delay = delay
+	m.delay = time.Duration(delay) * time.Second
 
 	m.workSet = mapset.NewSet[string]()
 	m.seriesSet = mapset.NewSet[string]()
@@ -238,6 +241,7 @@ func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, startPage 
 	}
 
 	m.prog = progress.New()
+	m.spin = spinner.New(spinner.WithSpinner(spinner.Ellipsis))
 
 	m.width = 80
 	m.height = 40
@@ -258,9 +262,14 @@ func (m runtimeModel) View() string {
 	doc.WriteString(progressCode(1, percent))
 	doc.WriteString(lipgloss.NewStyle().MarginBottom(1).Render(m.prog.ViewAs(percent)) + "\n")
 
+	currentAction := fmt.Sprintf("Requesting%s", m.spin.View())
+	if !m.crawlInProgress {
+		currentAction = fmt.Sprintf("Sleeping %s", time.Until(m.nextCrawlTime).Round(time.Second).String())
+	}
+
 	// current stats
 	stats := []string{
-		fmt.Sprintf("Countdown time: %d", m.secsToNextCrawl),
+		currentAction,
 		fmt.Sprintf("Works discovered: %d", m.workSet.Cardinality()),
 		fmt.Sprintf("To crawl: %d", m.queue.Len()),
 		fmt.Sprintf("Crawled: %d", m.pagesCrawled),
@@ -314,9 +323,7 @@ type crawlResponseMsg struct {
 
 func (m runtimeModel) Init() tea.Cmd {
 
-	return func() tea.Msg {
-		return tickMsg{}
-	}
+	return tea.Batch(tick(), m.spin.Tick)
 }
 
 func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
@@ -335,21 +342,35 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spin, cmd = m.spin.Update(msg)
+		return m, cmd
 	case tickMsg:
-		m.secsToNextCrawl--
-		if m.secsToNextCrawl <= 0 {
+
+		if !m.crawlInProgress && m.nextCrawlTime.Compare(time.Now()) == -1 {
 			// start a crawl
 			toCrawl := m.queue.PopFront()
+			m.crawlInProgress = true
 
-			return m, func() tea.Msg {
-				return crawl(toCrawl)
-			}
+			return m, tea.Batch(
+				tick(),
+				startCrawl(toCrawl),
+			)
 
 		}
 
 		return m, tick()
 
 	case crawlResponseMsg:
+
+		if msg.Fatal {
+			return m, tea.Quit
+		}
+
+		m.crawlInProgress = false
+		m.nextCrawlTime = time.Now().Add(max(m.delay, time.Second*time.Duration(msg.WaitFor)))
+
 		if msg.Success {
 			m.pagesCrawled++
 
@@ -369,12 +390,7 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 			}
 
-			m.secsToNextCrawl = m.delay
-
 		} else {
-			if msg.Fatal {
-				return m, tea.Quit
-			}
 
 			logmsg := msg.ErrMsg
 
@@ -391,7 +407,6 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 			logmsg += "\n  for " + msg.CrawlUrl
 
-			m.secsToNextCrawl = max(msg.WaitFor, m.delay)
 			m.logs = append(m.logs, logmsg)
 		}
 
@@ -400,7 +415,7 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-		return m, tick()
+		return m, nil
 
 	}
 
@@ -408,9 +423,15 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func tick() tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
 		return tickMsg{}
 	})
+}
+
+func startCrawl(crawlUrl string) tea.Cmd {
+	return func() tea.Msg {
+		return crawl(crawlUrl)
+	}
 }
 
 func crawl(crawlUrl string) (cr crawlResponseMsg) {
