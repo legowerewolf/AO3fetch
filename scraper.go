@@ -51,6 +51,11 @@ func main() {
 	flag.StringVar(&outputFile, "outputFile", "", "Write collected works to file instead of standard output.")
 	flag.Parse()
 
+	if flag.NFlag() == 0 {
+		flag.PrintDefaults()
+		return
+	}
+
 	// Check parameters
 
 	if showVersionAndQuit {
