@@ -182,6 +182,7 @@ func main() {
 
 	r, err := p.Run()
 	fmt.Print(progressCode(0, 0))
+	fmt.Print(title("AO3Fetch"))
 	if err != nil {
 		log.Fatal("Tea program quit: ", err)
 	}
@@ -260,6 +261,7 @@ func (m runtimeModel) View() string {
 
 	// write progress bars
 	doc.WriteString(progressCode(1, percent))
+	doc.WriteString(title(fmt.Sprintf("AO3Fetch - %d%%", int(percent*100))))
 	doc.WriteString(lipgloss.NewStyle().MarginBottom(1).Render(m.prog.ViewAs(percent)) + "\n")
 
 	// current stats
@@ -566,6 +568,10 @@ func getHref(t html.Token) (string, error) {
 
 func progressCode(state int, progress float64) string {
 	return "\x1b]9;4;" + strconv.Itoa(state) + ";" + strconv.Itoa(int(progress*100)) + "\x07"
+}
+
+func title(title string) string {
+	return "\x1b]0;" + title + "\x07"
 }
 
 func remainingLines(m runtimeModel, doc *strings.Builder) int {
