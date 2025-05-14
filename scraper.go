@@ -262,12 +262,12 @@ func (m runtimeModel) View() string {
 	doc.WriteString(progressCode(1, percent))
 	doc.WriteString(lipgloss.NewStyle().MarginBottom(1).Render(m.prog.ViewAs(percent)) + "\n")
 
+	// current stats
 	currentAction := fmt.Sprintf("Requesting%s", m.spin.View())
 	if !m.crawlInProgress {
 		currentAction = fmt.Sprintf("Sleeping %s", time.Until(m.nextCrawlTime).Round(time.Second).String())
 	}
 
-	// current stats
 	stats := []string{
 		currentAction,
 		fmt.Sprintf("Works discovered: %d", m.workSet.Cardinality()),
@@ -299,8 +299,10 @@ func (m runtimeModel) View() string {
 		MaxWidth(m.width - lipgloss.Width(statBlock)).
 		Render(strings.Join(logLines, "\n"))
 
+	// group stats and logs
 	doc.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, statBlock, logBlock) + "\n")
 
+	// write everything to screen
 	return doc.String()
 }
 
