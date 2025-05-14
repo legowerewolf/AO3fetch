@@ -377,8 +377,17 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.spin, cmd = m.spin.Update(msg)
 		return m, cmd
 	case tickMsg:
-		if !m.crawlInProgress && m.nextCrawlTime.Compare(time.Now()) == -1 {
-			// start a crawl
+		if m.crawlInProgress {
+			return m, tick()
+		}
+
+		// queue empty, quit
+		if m.queue.Len() == 0 {
+			return m, tea.Quit
+		}
+
+		// sleep time over, crawl
+		if m.nextCrawlTime.Compare(time.Now()) == -1 {
 			toCrawl := m.queue.PopFront()
 			m.crawlInProgress = true
 
@@ -429,11 +438,6 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			logmsg += "\n  for " + msg.CrawlUrl
 
 			m.logger.Println(logmsg)
-		}
-
-		// queue empty, quit
-		if m.queue.Len() == 0 {
-			return m, tea.Quit
 		}
 
 		return m, nil
