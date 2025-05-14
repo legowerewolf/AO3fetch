@@ -422,7 +422,7 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 		} else {
 
-			logmsg := msg.ErrMsg
+			logmsg := time.Now().Local().Format("15:04:05") + " " + msg.ErrMsg
 
 			if msg.WaitFor > 0 {
 				logmsg += fmt.Sprintf(" [server-requested delay: %d]", msg.WaitFor)
