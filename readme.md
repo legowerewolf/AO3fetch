@@ -2,8 +2,7 @@
 
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/legowerewolf/AO3fetch?sort=semver&style=flat-square&label=latest%20release)![download count badge](https://img.shields.io/github/downloads/legowerewolf/ao3fetch/latest/total?sort=semver&style=flat-square&label=downloads)](https://github.com/legowerewolf/AO3fetch/releases/latest)
 
-Tool for collecting work URLs from AO3 list views. Capable of navigating the
-depths of index pages. Designed for use with the
+Tool for collecting work URLs from AO3 list views. Designed for use with the
 [FanFicFare](https://github.com/JimmXinu/FanFicFare) extension for
 [Calibre](https://calibre-ebook.com/).
 
