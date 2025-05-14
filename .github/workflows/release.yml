@@ -40,6 +40,13 @@ jobs:
           GOARCH: ${{ matrix.arch }}
           REFNAME: ${{ github.ref_name }}
 
+      - name: Store builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release/*
+          overwrite: true
+
       - name: Upload binaries to release
         run: |
           binary=(release/*)
