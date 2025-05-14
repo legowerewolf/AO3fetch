@@ -25,6 +25,7 @@ import (
 
 	"github.com/legowerewolf/AO3fetch/ao3client"
 	"github.com/legowerewolf/AO3fetch/buildinfo"
+	"github.com/legowerewolf/AO3fetch/logbuffer"
 )
 
 // global variables
@@ -223,7 +224,9 @@ type runtimeModel struct {
 
 	prog progress.Model
 	spin spinner.Model
-	logs []string
+	logs logbuffer.LogBuffer
+
+	logger *log.Logger
 }
 
 func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, startPage int, pages int) (m runtimeModel) {
@@ -246,6 +249,9 @@ func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, startPage 
 
 	m.width = 80
 	m.height = 40
+
+	m.logs = logbuffer.NewLogBuffer()
+	m.logger = log.New(m.logs, "", log.Ltime)
 
 	return
 }
@@ -316,12 +322,7 @@ func (m runtimeModel) View() string {
 	leftCol := lipgloss.JoinVertical(lipgloss.Center, statBlock, helpMsg)
 
 	// logs
-	logStartPoint := 0
-	lLinesAvailable := max(remainingLines(m, &doc), lipgloss.Height(leftCol))
-	if len(m.logs) > lLinesAvailable {
-		logStartPoint = len(m.logs) - lLinesAvailable
-	}
-	logLines := m.logs[logStartPoint:]
+	logLines := m.logs.GetAtMostFromEnd(max(remainingLines(&m, &doc), lipgloss.Height(leftCol)))
 
 	logBlock := lipgloss.NewStyle().
 		MaxWidth(m.width - lipgloss.Width(leftCol)).
@@ -412,7 +413,7 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		} else {
-			logmsg := time.Now().Local().Format("15:04:05") + " " + msg.ErrMsg
+			logmsg := msg.ErrMsg
 
 			if msg.WaitFor > 0 {
 				logmsg += fmt.Sprintf(" [server-requested delay: %d]", msg.WaitFor)
@@ -427,7 +428,7 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 			logmsg += "\n  for " + msg.CrawlUrl
 
-			m.logs = append(m.logs, logmsg)
+			m.logger.Println(logmsg)
 		}
 
 		// queue empty, quit
@@ -563,6 +564,6 @@ func title(title string) string {
 	return "\x1b]0;" + title + "\x07"
 }
 
-func remainingLines(m runtimeModel, doc *strings.Builder) int {
+func remainingLines(m *runtimeModel, doc *strings.Builder) int {
 	return m.height - strings.Count(doc.String(), "\n") - 1
 }
