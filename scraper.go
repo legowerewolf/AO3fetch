@@ -43,15 +43,17 @@ func main() {
 		includeSeries, showVersionAndQuit   bool
 	)
 	flag.BoolVar(&showVersionAndQuit, "version", false, "Show version information and quit.")
-	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from (including page number).")
-	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl. If set to -1, crawl to the end.")
-	flag.BoolVar(&includeSeries, "series", true, "Crawl discovered series.")
-	flag.IntVar(&delay, "delay", 10, "Delay between requests in seconds. Minimum 10s.")
-	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password")
-	flag.StringVar(&outputFile, "outputFile", "", "Write collected works to file instead of standard output.")
+	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from.")
+	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl.")
+	flag.BoolVar(&includeSeries, "series", true, "Discover and crawl series.")
+	flag.IntVar(&delay, "delay", 10, "Delay between requests in seconds.")
+	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password.")
+	flag.StringVar(&outputFile, "outputFile", "", "Filename to write collected work URLs to instead of standard output.")
 	flag.Parse()
 
 	if flag.NFlag() == 0 {
+		fmt.Println("AO3Fetch by @legowerewolf - https://github.com/legowerewolf/AO3fetch")
+		fmt.Println()
 		flag.PrintDefaults()
 		return
 	}
@@ -72,7 +74,7 @@ func main() {
 	var seedURL *url.URL
 	var startPage int
 	if seedURLRaw == "" {
-		log.Fatal("No URL provided")
+		log.Fatal("No URL provided.")
 	} else {
 		var err error
 		seedURL, err = url.Parse(seedURLRaw)
@@ -113,7 +115,11 @@ func main() {
 	}
 
 	if credentials != "" {
-		username, pass, _ := strings.Cut(credentials, ":")
+		username, pass, found := strings.Cut(credentials, ":")
+
+		if !found {
+			log.Fatal("Credentials provided but could not split username from password. Did you include a colon?")
+		}
 
 		log.Println("Logging in as " + username + "...")
 
@@ -195,6 +201,7 @@ func main() {
 
 	rModel := r.(runtimeModel)
 
+	fmt.Println()
 	log.Printf("Found %d works across %d pages. \n", rModel.workSet.Cardinality(), rModel.pagesCrawled)
 	fmt.Println()
 
