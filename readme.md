@@ -11,10 +11,10 @@ depths of index pages. Designed for use with the
 
 ## Notes for AO3 Maintainers
 
-- This crawler uses the user-agent string `legowerewolf-ao3scraper/[commit]`.
+- This crawler uses the user-agent string
+  `AO3Fetch/[commit] (+https://github.com/legowerewolf/AO3fetch)`.
 - The crawler enforces a maximum request rate of 1 request per 10 seconds.
-- It will also obey `Retry-After` headers if they are set in the response.
-- I am more than happy to make changes if requested.
+- It will obey `Retry-After` headers if they are set in the response.
 
 ## Arguments
 
