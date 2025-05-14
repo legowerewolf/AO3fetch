@@ -18,14 +18,14 @@ depths of index pages. Designed for use with the
 
 ## Arguments
 
+Also available with the `-help` flag, or when run with no arguments.
+
 - `-url` (string) URL to start crawling from
-- `-delay` (int) Delay between requests in seconds (default 10)
-- `-login` (string) Login credentials in the form of username:password
 - `-pages` (int) Number of pages to crawl (default 1)
-- `-progress` (boolean) Show progress bar (default true, disable with
-  `-progress=false`)
 - `-series` (boolean) Include series in the crawl (default true, disable with
   `-series=false`)
-- `-version` (boolean) Show version and exit (default false)
 - `-outputFile` (string) Write the list of collected works to a file instead of
   the terminal output.
+- `-login` (string) Login credentials in the form of username:password
+- `-delay` (int) Delay between requests in seconds (default 10)
+- `-version` (boolean) Show version and exit (default false)
