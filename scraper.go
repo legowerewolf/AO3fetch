@@ -14,36 +14,49 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cheggaaa/pb/v3"
+	"golang.org/x/net/html"
+
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gammazero/deque"
+
 	"github.com/legowerewolf/AO3fetch/ao3client"
 	"github.com/legowerewolf/AO3fetch/buildinfo"
-	"golang.org/x/net/html"
+	"github.com/legowerewolf/AO3fetch/logbuffer"
 )
 
 // global variables
-var (
-	isWorkMatcher, isSeriesMatcher, isSpecialMatcher *regexp.Regexp
-	client                                           *ao3client.Ao3Client
-)
+var client *ao3client.Ao3Client
+
+var isWorkMatcher = regexp.MustCompile(`/works/\d+`)
+var isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
+var isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
 
 func main() {
 	// parse flags
 	var (
-		seedURLRaw, credentials, outputFile             string
-		pages, delay                                    int
-		includeSeries, showProgress, showVersionAndQuit bool
+		seedURLRaw, credentials, outputFile string
+		pages, delay                        int
+		includeSeries, showVersionAndQuit   bool
 	)
 	flag.BoolVar(&showVersionAndQuit, "version", false, "Show version information and quit.")
-	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from (including page number).")
-	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl. If set to -1, crawl to the end.")
-	flag.BoolVar(&includeSeries, "series", true, "Crawl discovered series.")
-	flag.IntVar(&delay, "delay", 10, "Delay between requests in seconds. Minimum 10s.")
-	flag.BoolVar(&showProgress, "progress", true, "Show progress bar.")
-	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password")
-	flag.StringVar(&outputFile, "outputFile", "", "Write collected works to file instead of standard output.")
+	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from.")
+	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl.")
+	flag.BoolVar(&includeSeries, "series", true, "Discover and crawl series.")
+	flag.IntVar(&delay, "delay", 10, "Delay between requests in seconds.")
+	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password.")
+	flag.StringVar(&outputFile, "outputFile", "", "Filename to write collected work URLs to instead of standard output.")
 	flag.Parse()
+
+	if flag.NFlag() == 0 {
+		fmt.Println("AO3Fetch by @legowerewolf - https://github.com/legowerewolf/AO3fetch")
+		fmt.Println()
+		flag.PrintDefaults()
+		return
+	}
 
 	// Check parameters
 
@@ -61,7 +74,7 @@ func main() {
 	var seedURL *url.URL
 	var startPage int
 	if seedURLRaw == "" {
-		log.Fatal("No URL provided")
+		log.Fatal("No URL provided.")
 	} else {
 		var err error
 		seedURL, err = url.Parse(seedURLRaw)
@@ -102,7 +115,11 @@ func main() {
 	}
 
 	if credentials != "" {
-		username, pass, _ := strings.Cut(credentials, ":")
+		username, pass, found := strings.Cut(credentials, ":")
+
+		if !found {
+			log.Fatal("Credentials provided but could not split username from password. Did you include a colon?")
+		}
 
 		log.Println("Logging in as " + username + "...")
 
@@ -165,87 +182,27 @@ func main() {
 
 	// parameters all check out, finish initializing
 
-	// compile regexes
-	isWorkMatcher = regexp.MustCompile(`/works/\d+`)
-	isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
-	isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
-
-	// make the coordination channels, queue, and sets
-	returnedWorks := make(chan string)   // relays detected work URLs back to coordinator
-	returnedSeries := make(chan string)  // ditto for series
-	finished := make(chan int)           // tells coordinator when a crawl is finished
-	var queue deque.Deque[string]        // stores URLs to be crawled
-	workSet := mapset.NewSet[string]()   // stores URLs of works that have been detected
-	seriesSet := mapset.NewSet[string]() // ditto for series
-
 	// initialization done, start scraping
 
 	log.Println("Scrape parameters: ")
-	fmt.Println("URL:    ", seedURL)
-	fmt.Println("Pages:  ", pages)
+	fmt.Println("URL:     ", seedURL)
+	fmt.Println("Pages:   ", pages)
 	fmt.Println("Series?: ", includeSeries)
-	fmt.Println("Delay:  ", delay)
+	fmt.Println("Delay:   ", delay)
 
-	// populate queue
-	query := seedURL.Query()
-	for addlPage := range pages {
-		query.Set("page", strconv.Itoa(startPage+addlPage))
-		seedURL.RawQuery = query.Encode()
+	p := tea.NewProgram(initRuntimeModel(includeSeries, delay, *seedURL, startPage, pages), tea.WithAltScreen())
 
-		queue.PushBack(seedURL.String())
+	r, err := p.Run()
+	fmt.Print(progressCode(0, 0))
+	fmt.Print(title("AO3Fetch"))
+	if err != nil {
+		log.Fatal("Tea program quit: ", err)
 	}
 
-	// set up and start progress bar
-	bar := pb.New(pages)
-	bar.SetTemplateString(`{{counters .}} {{bar . " " ("█" | green) ("█" | green) ("█" | white) " "}} {{percent .}}`)
-	if showProgress {
-		bar.Start()
-	}
+	rModel := r.(runtimeModel)
 
-	for rateLimiter := time.Tick(time.Duration(delay) * time.Second); queue.Len() > 0; <-rateLimiter {
-		go crawl(queue.Front(), returnedWorks, returnedSeries, finished)
-
-		// "the coordinator"
-		for crawlInProgress := true; crawlInProgress; {
-			select {
-			case work := <-returnedWorks: // save detected works
-				workSet.Add(work)
-			case series := <-returnedSeries: // save detected series, add unique series to queue
-				if !includeSeries {
-					continue
-				}
-
-				if seriesSet.Contains(series) {
-					continue
-				}
-
-				seriesSet.Add(series)
-				queue.PushBack(series)
-				bar.SetTotal(int64(pages + seriesSet.Cardinality()))
-			case waitTime := <-finished: // exit coordinator loop when crawl is finished
-				if waitTime >= 0 { // waitTime >= 0 means we should try again later, so rotate the queue
-					queue.Rotate(1)
-					time.Sleep(time.Duration(waitTime) * time.Second)
-				} else if waitTime == -1 { // we were successful or got a non-retryable error, so remove the URL from the queue
-					queue.PopFront()
-					bar.Increment()
-				} else if waitTime == -2 { // Fatal error while crawling: stop crawling, dump results
-					queue.Clear()
-				}
-
-				crawlInProgress = false
-			}
-		}
-
-		// exit immediately if queue is empty, do not wait for next rate limiter tick
-		if queue.Len() == 0 {
-			break
-		}
-	}
-
-	bar.Finish()
-
-	log.Printf("Found %d works across %d pages. \n", workSet.Cardinality(), pages+seriesSet.Cardinality())
+	fmt.Println()
+	log.Printf("Found %d works across %d pages. \n", rModel.workSet.Cardinality(), rModel.pagesCrawled)
 	fmt.Println()
 
 	var workOutputTarget io.Writer
@@ -256,17 +213,265 @@ func main() {
 		workOutputTarget = log.Writer()
 	}
 
-	for url := range workSet.Iter() {
+	for url := range rModel.workSet.Iter() {
 		fmt.Fprintln(workOutputTarget, url)
 	}
 
 }
 
-func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished chan int) {
-	waitTime := -1 // default to no-retry finish
-	defer func() { // always send a message when we exit
-		finished <- waitTime
-	}()
+type runtimeModel struct {
+	includeSeries bool
+	delay         time.Duration
+
+	queue     deque.Deque[string] // stores URLs to be crawled
+	workSet   mapset.Set[string]  // stores URLs of works that have been detected
+	seriesSet mapset.Set[string]  // ditto for series
+
+	nextCrawlTime   time.Time
+	crawlInProgress bool
+	pagesCrawled    int
+
+	width  int
+	height int
+
+	prog progress.Model
+	spin spinner.Model
+	logs logbuffer.LogBuffer
+
+	logger *log.Logger
+}
+
+func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, startPage int, pages int) (m runtimeModel) {
+	m.includeSeries = includeSeries
+	m.delay = time.Duration(delay) * time.Second
+
+	m.workSet = mapset.NewSet[string]()
+	m.seriesSet = mapset.NewSet[string]()
+
+	query := seedURL.Query()
+	for addlPage := range pages {
+		query.Set("page", strconv.Itoa(startPage+addlPage))
+		seedURL.RawQuery = query.Encode()
+
+		m.queue.PushBack(seedURL.String())
+	}
+
+	m.prog = progress.New()
+	m.spin = spinner.New(spinner.WithSpinner(spinner.Ellipsis))
+
+	m.width = 80
+	m.height = 40
+
+	m.logs = logbuffer.NewLogBuffer()
+	m.logger = log.New(m.logs, "", log.Ltime)
+
+	return
+}
+
+func (m runtimeModel) View() string {
+
+	doc := strings.Builder{}
+
+	var percent float64 = 0
+	if m.pagesCrawled > 0 {
+		percent = float64(m.pagesCrawled) / float64(m.pagesCrawled+m.queue.Len())
+	}
+
+	// write progress bars
+	doc.WriteString(progressCode(1, percent))
+	doc.WriteString(title(fmt.Sprintf("AO3Fetch - %d%%", int(percent*100))))
+	doc.WriteString(lipgloss.NewStyle().MarginBottom(1).Render(m.prog.ViewAs(percent)) + "\n")
+
+	// current stats
+	currentAction := fmt.Sprintf("Requesting%s", m.spin.View())
+	if !m.crawlInProgress {
+		currentAction = fmt.Sprintf("Sleeping %s", time.Until(m.nextCrawlTime).Round(time.Second).String())
+	}
+
+	eta := m.nextCrawlTime
+	if m.crawlInProgress {
+		eta = time.Now()
+	}
+	eta = eta.Add(m.delay * time.Duration(m.queue.Len()-1))
+
+	totalPages := m.pagesCrawled + m.queue.Len()
+	if m.crawlInProgress {
+		totalPages += 1
+	}
+
+	series := "Ignoring series"
+	if m.includeSeries {
+		series = fmt.Sprintf("Series discovered: %d", m.seriesSet.Cardinality())
+	}
+
+	stats := []string{
+		currentAction,
+		fmt.Sprintf("ETA: %s", eta.Local().Format("15:04:05")),
+		fmt.Sprintf("Works discovered: %d", m.workSet.Cardinality()),
+		series,
+		fmt.Sprintf("To crawl: %d", m.queue.Len()),
+		fmt.Sprintf("Crawled: %d", m.pagesCrawled),
+		fmt.Sprintf("Total pages: %d", totalPages),
+	}
+
+	statBlock := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderTop(true).
+		BorderRight(true).
+		BorderLeft(true).
+		BorderBottom(true).
+		MarginRight(2).
+		Padding(1, 2).
+		Width(25).
+		Render(strings.Join(stats, "\n"))
+
+	// add help message
+	helpMsg := lipgloss.NewStyle().
+		Faint(true).
+		Render("abort: esc / ctrl+c")
+
+	// group stat block and help message into column
+	leftCol := lipgloss.JoinVertical(lipgloss.Center, statBlock, helpMsg)
+
+	// logs
+	logLines := m.logs.GetAtMostFromEnd(max(remainingLines(&m, &doc), lipgloss.Height(leftCol)))
+
+	logBlock := lipgloss.NewStyle().
+		MaxWidth(m.width - lipgloss.Width(leftCol)).
+		Render(strings.Join(logLines, "\n"))
+
+	// group stats and logs
+	doc.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftCol, logBlock) + "\n")
+
+	// write everything to screen
+	return doc.String()
+}
+
+type tickMsg struct{}
+
+type crawlResponseMsg struct {
+	CrawlUrl string
+	Success  bool
+
+	// fail fields
+	Retryable bool
+	Fatal     bool
+	ErrMsg    string
+	WaitFor   int // seconds
+
+	// success fields
+	AddWorks  []string
+	AddSeries []string
+}
+
+func (m runtimeModel) Init() tea.Cmd {
+
+	return tea.Batch(tick(), m.spin.Tick)
+}
+
+func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := message.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc", "ctrl+c":
+			return m, tea.Quit
+		}
+
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
+		m.prog.Width = msg.Width
+
+		return m, nil
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spin, cmd = m.spin.Update(msg)
+		return m, cmd
+	case tickMsg:
+		if m.crawlInProgress {
+			return m, tick()
+		}
+
+		// queue empty, quit
+		if m.queue.Len() == 0 {
+			return m, tea.Quit
+		}
+
+		// sleep time over, crawl
+		if m.nextCrawlTime.Compare(time.Now()) == -1 {
+			toCrawl := m.queue.PopFront()
+			m.crawlInProgress = true
+
+			return m, tea.Batch(
+				tick(),
+				startCrawl(toCrawl),
+			)
+		}
+
+		return m, tick()
+	case crawlResponseMsg:
+		if msg.Fatal {
+			return m, tea.Quit
+		}
+
+		m.crawlInProgress = false
+		m.nextCrawlTime = time.Now().Add(max(m.delay, time.Second*time.Duration(msg.WaitFor)))
+
+		if msg.Success {
+			m.pagesCrawled++
+
+			m.workSet.Append(msg.AddWorks...)
+
+			if m.includeSeries {
+				for _, crawlable := range msg.AddSeries {
+					if m.seriesSet.Contains(crawlable) {
+						continue
+					}
+
+					m.seriesSet.Add(crawlable)
+					m.queue.PushBack(crawlable)
+				}
+			}
+		} else {
+			logmsg := msg.ErrMsg
+
+			if msg.WaitFor > 0 {
+				logmsg += fmt.Sprintf(" [server-requested delay: %d]", msg.WaitFor)
+			}
+
+			if msg.Retryable {
+				m.queue.PushBack(msg.CrawlUrl)
+				logmsg += " [will retry]"
+			} else {
+				logmsg += " [unretryable]"
+			}
+
+			logmsg += "\n  for " + msg.CrawlUrl
+
+			m.logger.Println(logmsg)
+		}
+
+		return m, nil
+	}
+
+	return m, nil
+}
+
+func tick() tea.Cmd {
+	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+		return tickMsg{}
+	})
+}
+
+func startCrawl(crawlUrl string) tea.Cmd {
+	return func() tea.Msg {
+		return crawl(crawlUrl)
+	}
+}
+
+func crawl(crawlUrl string) (cr crawlResponseMsg) {
+	cr.CrawlUrl = crawlUrl
 
 	// make request, handle errors
 	resp, err := client.Get(crawlUrl)
@@ -274,38 +479,43 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 		err := err.(*url.Error)
 
 		if err.Timeout() {
-			log.Println("Request timed out. Will retry later.", crawlUrl)
-			waitTime = 0
+			cr.Retryable = true
+			cr.ErrMsg = "Request timed out."
 			return
 		}
 
-		log.Println("Unknown error. Skipping.", err.Error(), crawlUrl)
+		cr.ErrMsg = fmt.Sprint("Unknown error: ", err.Error())
 		return
 	}
 	defer resp.Body.Close()
+
+	// handle retry header
 	if retryHeader := resp.Header.Get("Retry-After"); retryHeader != "" {
 		if retryTime, err := strconv.Atoi(retryHeader); err == nil {
-			waitTime = retryTime
+			cr.WaitFor = retryTime
 		} else if retryDate, err := http.ParseTime(retryHeader); err == nil {
-			waitTime = int(time.Until(retryDate).Seconds())
+			cr.WaitFor = int(time.Until(retryDate).Seconds())
 		} else {
-			log.Printf("Server requested pause, but gave invalid time ('%s'). Aborting. Please file an issue. \n", retryHeader)
-			waitTime = -2
+			cr.ErrMsg = fmt.Sprintf("Server requested pause, but gave invalid time ('%s').", retryHeader)
+			cr.Fatal = true
 			return
 		}
 
-		log.Printf("Server requested pause. Suspending for %d seconds. \n", waitTime)
+		cr.ErrMsg = fmt.Sprintf("Server requested pause. Suspending for %d seconds.", cr.WaitFor)
+		cr.Retryable = true
 		return
 	}
+
+	// handle non-2xx status codes
 	if codeClass := resp.StatusCode / 100; codeClass != 2 {
 		switch codeClass {
 		case 4:
-			log.Println("Bad request. Skipping.", resp.StatusCode, crawlUrl)
+			cr.ErrMsg = fmt.Sprintf("Bad request (%d).", resp.StatusCode)
 		case 5:
-			log.Println("Server error. Will retry later.", resp.StatusCode, crawlUrl)
-			waitTime = 0
+			cr.ErrMsg = fmt.Sprintf("Server error (%d).", resp.StatusCode)
+			cr.Retryable = true
 		default:
-			log.Println("Unknown error. Skipping.", resp.StatusCode, crawlUrl)
+			cr.ErrMsg = fmt.Sprintf("Got unexpected status code %d.", resp.StatusCode)
 		}
 		return
 	}
@@ -330,9 +540,9 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 		}
 
 		if isWorkMatcher.MatchString(href) {
-			returnedWorks <- client.ToFullURL(href)
+			cr.AddWorks = append(cr.AddWorks, client.ToFullURL(href))
 		} else if !crawledPageIsSeries && isSeriesMatcher.MatchString(href) {
-			returnedSeries <- client.ToFullURL(href)
+			cr.AddSeries = append(cr.AddSeries, client.ToFullURL(href))
 		}
 
 		if crawledPageIsSeries {
@@ -342,12 +552,15 @@ func crawl(crawlUrl string, returnedWorks, returnedSeries chan string, finished 
 				}
 
 				if attr.Val == "next" {
-					returnedSeries <- client.ToFullURL(href)
+					cr.AddSeries = append(cr.AddSeries, client.ToFullURL(href))
 					break
 				}
 			}
 		}
 	}
+
+	cr.Success = true
+	return
 }
 
 func getHref(t html.Token) (string, error) {
@@ -357,4 +570,16 @@ func getHref(t html.Token) (string, error) {
 		}
 	}
 	return "", errors.New("no href attribute found")
+}
+
+func progressCode(state int, progress float64) string {
+	return "\x1b]9;4;" + strconv.Itoa(state) + ";" + strconv.Itoa(int(progress*100)) + "\x07"
+}
+
+func title(title string) string {
+	return "\x1b]0;" + title + "\x07"
+}
+
+func remainingLines(m *runtimeModel, doc *strings.Builder) int {
+	return m.height - strings.Count(doc.String(), "\n") - 1
 }
