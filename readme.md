@@ -36,6 +36,8 @@ Also available with the `-help` flag, or when run with no arguments.
 - If you set `-pages` to `-1`, it'll automatically determine the page count.
 - If your `-url` includes a `page=n` parameter, it'll start from that page.
 - If you _don't_ want to include series in your crawl, use `-series=false`.
+- It supports the official alternate URLs for the Archive:
+  https://archiveofourown.gay and https://archive.transformativeworks.org.
 
 See the
 [flags package documentation](https://pkg.go.dev/flag#hdr-Command_line_flag_syntax)
