@@ -56,4 +56,4 @@ jobs:
           gh release upload ${{ github.ref_name }} $archive#${{ matrix.platform }}-${{ matrix.arch }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        if: github.event_name == 'release' || github.event_name == ''
+        if: github.event_name == 'release'
