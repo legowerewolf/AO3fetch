@@ -35,6 +35,9 @@ var isWorkMatcher = regexp.MustCompile(`/works/\d+`)
 var isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
 var isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
 
+const delayBackoffFactor = 1.3
+const delayDecayFactor = 0.9
+
 func main() {
 	// parse flags
 	var (
@@ -224,30 +227,38 @@ func main() {
 }
 
 type runtimeModel struct {
+	// config properties
 	includeSeries bool
 	delay         time.Duration
 
-	queue     deque.Deque[string] // stores URLs to be crawled
-	workSet   mapset.Set[string]  // stores URLs of works that have been detected
-	seriesSet mapset.Set[string]  // ditto for series
+	// work and series data
+	queue        deque.Deque[string] // stores URLs to be crawled
+	workSet      mapset.Set[string]  // stores URLs of works that have been detected
+	seriesSet    mapset.Set[string]  // ditto for series
+	pagesCrawled int
 
+	// logging
+	logs   logbuffer.LogBuffer
+	logger *log.Logger
+
+	// control
 	nextCrawlTime   time.Time
+	currentDelay    time.Duration
 	crawlInProgress bool
-	pagesCrawled    int
 
+	// view props
 	width  int
 	height int
 
+	// sub-models
 	prog progress.Model
 	spin spinner.Model
-	logs logbuffer.LogBuffer
-
-	logger *log.Logger
 }
 
 func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, startPage int, pages int) (m runtimeModel) {
 	m.includeSeries = includeSeries
 	m.delay = time.Duration(delay) * time.Second
+	m.currentDelay = m.delay
 
 	m.workSet = mapset.NewSet[string]()
 	m.seriesSet = mapset.NewSet[string]()
@@ -296,7 +307,7 @@ func (m runtimeModel) View() string {
 	if m.crawlInProgress {
 		eta = time.Now()
 	}
-	eta = eta.Add(m.delay * time.Duration(m.queue.Len()-1))
+	eta = eta.Add(m.currentDelay * time.Duration(m.queue.Len()-1))
 
 	totalPages := m.pagesCrawled + m.queue.Len()
 	if m.crawlInProgress {
@@ -420,7 +431,6 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.crawlInProgress = false
-		m.nextCrawlTime = time.Now().Add(max(m.delay, time.Second*time.Duration(msg.WaitFor)))
 
 		if msg.Success {
 			m.pagesCrawled++
@@ -437,6 +447,8 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					m.queue.PushBack(crawlable)
 				}
 			}
+
+			m.currentDelay = time.Duration(delayDecayFactor * float32(max(m.delay, m.currentDelay)))
 		} else {
 			logmsg := msg.ErrMsg
 
@@ -454,7 +466,11 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			logmsg += "\n  for " + msg.CrawlUrl
 
 			m.logger.Println(logmsg)
+
+			m.currentDelay = time.Duration(float32(max(m.delay, m.currentDelay)) * delayBackoffFactor)
 		}
+
+		m.nextCrawlTime = time.Now().Add(max(m.currentDelay, time.Second*time.Duration(msg.WaitFor)))
 
 		return m, nil
 	}
