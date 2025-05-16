@@ -115,6 +115,10 @@ func main() {
 	}
 
 	if credentials != "" {
+		if seedURL.Scheme != "https" {
+			log.Fatal("Credentials cannot be used with insecure URLs.")
+		}
+
 		username, pass, found := strings.Cut(credentials, ":")
 
 		if !found {
