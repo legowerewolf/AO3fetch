@@ -75,7 +75,7 @@ func main() {
 	}
 
 	var seedURL *url.URL
-	var startPage int
+
 	if seedURLRaw == "" {
 		log.Fatal("No URL provided.")
 	} else {
@@ -85,15 +85,6 @@ func main() {
 			log.Fatal("Invalid URL provided: ", seedURLRaw)
 		}
 
-		query := seedURL.Query()
-		startPage = 1
-		if query.Has("page") {
-			var err error
-			startPage, err = strconv.Atoi(query.Get("page"))
-			if err != nil {
-				log.Fatal("Failed to parse start page: ", err)
-			}
-		}
 	}
 
 	if delay < 10 {
@@ -138,52 +129,7 @@ func main() {
 		log.Println("Login successful.")
 	}
 
-	if pages == -1 {
-		// get number of pages from seed URL
-		log.Println("Getting number of pages...")
-
-		resp, err := client.Get(seedURL.String())
-		if err != nil {
-			log.Fatal("Page-counting request failed: ", err)
-		}
-		defer resp.Body.Close()
-
-		highest := 0
-
-		tokenizer := html.NewTokenizer(resp.Body)
-		for tt := tokenizer.Next(); tt != html.ErrorToken; tt = tokenizer.Next() {
-			token := tokenizer.Token()
-
-			if !(token.Type == html.StartTagToken && token.Data == "a") {
-				continue
-			}
-
-			href, err := getHref(token)
-			if err != nil {
-				continue
-			}
-
-			uhref, err := url.Parse(href)
-			if err != nil {
-				continue
-			}
-
-			query := uhref.Query()
-			if query.Has("page") {
-				page, err := strconv.Atoi(query.Get("page"))
-				if err != nil {
-					continue
-				}
-
-				if page > highest {
-					highest = page
-				}
-			}
-		}
-
-		pages = highest - startPage + 1
-		log.Printf("Discovered highest page number to be %d; number of pages given start page (%d) is %d\n", highest, startPage, pages)
-	} else if pages < 1 {
+	if pages < 1 && pages != -1 {
 		log.Fatal("Number of pages must be -1 (autodetect) or greater than 0.")
 	}
 
@@ -197,7 +143,7 @@ func main() {
 	fmt.Println("Series?: ", includeSeries)
 	fmt.Println("Delay:   ", delay)
 
-	p := tea.NewProgram(initRuntimeModel(includeSeries, delay, *seedURL, startPage, pages), tea.WithAltScreen())
+	p := tea.NewProgram(initRuntimeModel(includeSeries, delay, *seedURL, pages), tea.WithAltScreen())
 
 	r, err := p.Run()
 	fmt.Print(progressCode(0, 0))
@@ -228,11 +174,13 @@ func main() {
 
 type runtimeModel struct {
 	// config properties
-	includeSeries bool
-	delay         time.Duration
+	includeSeries  bool
+	autodetectStop bool
+	delay          time.Duration
 
 	// work and series data
 	queue        deque.Deque[string] // stores URLs to be crawled
+	queueSet     mapset.Set[string]  // stores URLs that have been queued to be crawled
 	workSet      mapset.Set[string]  // stores URLs of works that have been detected
 	seriesSet    mapset.Set[string]  // ditto for series
 	pagesCrawled int
@@ -255,7 +203,51 @@ type runtimeModel struct {
 	spin spinner.Model
 }
 
-func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, startPage int, pages int) (m runtimeModel) {
+func (m *runtimeModel) queueUrl(_url url.URL) bool {
+	uurl := _url.String()
+
+	isNew := m.queueSet.Add(uurl)
+
+	if isNew {
+		m.queue.PushBack(uurl)
+	}
+
+	return isNew
+}
+
+func getPageNum(u url.URL) int {
+	str := u.Query().Get("page")
+
+	if str == "" {
+		return 1
+	}
+
+	i, err := strconv.Atoi(str)
+
+	if err != nil {
+		return 1
+	}
+
+	return i
+}
+
+func (m *runtimeModel) queueUrlRange(seedURL url.URL, endPage int) {
+	startPage := getPageNum(seedURL)
+
+	query := seedURL.Query()
+
+	for pageNum := endPage; pageNum > startPage; pageNum-- {
+		query.Set("page", strconv.Itoa(pageNum))
+		seedURL.RawQuery = query.Encode()
+
+		if added := m.queueUrl(seedURL); added {
+			break
+		}
+	}
+
+}
+
+func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, pages int) (m runtimeModel) {
 	m.includeSeries = includeSeries
 	m.delay = time.Duration(delay) * time.Second
 	m.currentDelay = m.delay
@@ -263,12 +255,11 @@ func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, startPage 
 	m.workSet = mapset.NewSet[string]()
 	m.seriesSet = mapset.NewSet[string]()
 
-	query := seedURL.Query()
-	for addlPage := range pages {
-		query.Set("page", strconv.Itoa(startPage+addlPage))
-		seedURL.RawQuery = query.Encode()
-
-		m.queue.PushBack(seedURL.String())
+	if pages > 0 {
+		m.queueUrlRange(seedURL, pages)
+	} else {
+		m.autodetectStop = true
+		m.queueUrl(seedURL)
 	}
 
 	m.prog = progress.New()
@@ -546,6 +537,7 @@ func crawl(crawlUrl string) (cr crawlResponseMsg) {
 	for tt := tokenizer.Next(); tt != html.ErrorToken; tt = tokenizer.Next() {
 		token := tokenizer.Token()
 
+		// we only care about link tags
 		if !(token.Type == html.StartTagToken && token.Data == "a") {
 			continue
 		}
