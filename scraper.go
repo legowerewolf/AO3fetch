@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	"github.com/andybalholm/cascadia"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -34,6 +35,8 @@ var client *ao3client.Ao3Client
 var isWorkMatcher = regexp.MustCompile(`/works/\d+`)
 var isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
 var isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
+
+var linkSelector = mustParse("a")
 
 const delayBackoffFactor = 1.3
 const delayDecayFactor = 0.9
@@ -536,18 +539,16 @@ func crawl(crawlUrl string) (cr crawlResponseMsg) {
 		return
 	}
 
+	dom, err := html.Parse(resp.Body)
+	if err != nil {
+		cr.ErrMsg = "Failed to parse response body."
+		return
+	}
+
 	crawledPageIsSeries := isSeriesMatcher.MatchString(crawlUrl)
 
-	tokenizer := html.NewTokenizer(resp.Body)
-	for tt := tokenizer.Next(); tt != html.ErrorToken; tt = tokenizer.Next() {
-		token := tokenizer.Token()
-
-		// we only care about link tags
-		if !(token.Type == html.StartTagToken && token.Data == "a") {
-			continue
-		}
-
-		href, err := getHref(token)
+	for _, node := range cascadia.QueryAll(dom, linkSelector) {
+		href, err := getHref(node)
 		if err != nil {
 			continue
 		}
@@ -563,7 +564,7 @@ func crawl(crawlUrl string) (cr crawlResponseMsg) {
 		}
 
 		if crawledPageIsSeries {
-			for _, attr := range token.Attr {
+			for _, attr := range node.Attr {
 				if attr.Key != "rel" {
 					continue
 				}
@@ -580,7 +581,7 @@ func crawl(crawlUrl string) (cr crawlResponseMsg) {
 	return
 }
 
-func getHref(t html.Token) (string, error) {
+func getHref(t *html.Node) (string, error) {
 	for _, a := range t.Attr {
 		if a.Key == "href" {
 			return a.Val, nil
@@ -599,4 +600,13 @@ func title(title string) string {
 
 func remainingLines(m *runtimeModel, doc *strings.Builder) int {
 	return m.height - strings.Count(doc.String(), "\n") - 1
+}
+func mustParse(selector string) cascadia.Sel {
+	sel, err := cascadia.Parse(selector)
+
+	if err != nil {
+		panic(err)
+	}
+
+	return sel
 }
