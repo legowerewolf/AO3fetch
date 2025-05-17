@@ -155,6 +155,10 @@ func main() {
 	rModel := r.(runtimeModel)
 
 	fmt.Println()
+	fmt.Println("Runtime logs:")
+	rModel.logs.Dump(os.Stdout)
+
+	fmt.Println()
 	log.Printf("Found %d works across %d pages. \n", rModel.workSet.Cardinality(), rModel.pagesCrawled)
 	fmt.Println()
 

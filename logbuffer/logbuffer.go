@@ -1,6 +1,8 @@
 package logbuffer
 
 import (
+	"fmt"
+	"io"
 	"strings"
 )
 
@@ -41,4 +43,10 @@ func (l LogBuffer) GetAtMostFromEnd(lines int) []string {
 
 	return (*l.stream)[len(*l.stream)-lines:]
 
+}
+
+func (l LogBuffer) Dump(writer io.Writer) {
+	for _, line := range *l.stream {
+		fmt.Fprintln(writer, line)
+	}
 }
