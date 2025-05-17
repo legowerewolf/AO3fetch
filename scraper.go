@@ -236,11 +236,11 @@ func (m *runtimeModel) queueUrlRange(seedURL url.URL, endPage int) {
 
 	query := seedURL.Query()
 
-	for pageNum := endPage; pageNum > startPage; pageNum-- {
+	for pageNum := endPage; pageNum >= startPage; pageNum-- {
 		query.Set("page", strconv.Itoa(pageNum))
 		seedURL.RawQuery = query.Encode()
 
-		if added := m.queueUrl(seedURL); added {
+		if added := m.queueUrl(seedURL); !added {
 			break
 		}
 	}
@@ -254,6 +254,7 @@ func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, pages int)
 
 	m.workSet = mapset.NewSet[string]()
 	m.seriesSet = mapset.NewSet[string]()
+	m.queueSet = mapset.NewSet[string]()
 
 	if pages > 0 {
 		m.queueUrlRange(seedURL, pages)
