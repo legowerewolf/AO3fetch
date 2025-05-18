@@ -14,9 +14,10 @@ import (
 )
 
 type Ao3Client struct {
-	client          *http.Client
-	userAgentString string
-	baseUrl         *url.URL
+	client            *http.Client
+	userAgentString   string
+	baseUrl           *url.URL
+	authenticatedUser string
 }
 
 func NewAo3Client(baseUrl string) (*Ao3Client, error) {
@@ -37,7 +38,7 @@ func NewAo3Client(baseUrl string) (*Ao3Client, error) {
 		return nil, err
 	}
 
-	uaString := fmt.Sprintf("legowerewolf-ao3scraper/%s", (*buildInfo)["vcs.revision.withModified"])
+	uaString := fmt.Sprintf("AO3Fetch/%s (+https://github.com/legowerewolf/AO3fetch)", (*buildInfo)["vcs.revision.withModified"])
 
 	client := &http.Client{
 		Jar: jar,
@@ -89,6 +90,7 @@ func (c *Ao3Client) Authenticate(username, password string) error {
 
 	for _, cookie := range c.client.Jar.Cookies(c.baseUrl) {
 		if cookie.Name == "user_credentials" {
+			c.authenticatedUser = username
 			return nil
 		}
 	}
@@ -134,4 +136,12 @@ func (c *Ao3Client) ToFullURL(_url string) string {
 	o, _ := url.Parse(_url)
 
 	return c.baseUrl.JoinPath(o.Path).String()
+}
+
+func (c *Ao3Client) GetUser() string {
+	if c.authenticatedUser == "" {
+		return "Anonymous"
+	}
+
+	return c.authenticatedUser
 }
