@@ -453,7 +453,9 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			logmsg := msg.ErrMsg
 
 			if msg.WaitFor > 0 {
-				logmsg += fmt.Sprintf(" [server-requested delay: %d]", msg.WaitFor)
+				wait := time.Second * time.Duration(msg.WaitFor)
+
+				logmsg += fmt.Sprintf(" [server-requested delay: %s]", wait.String())
 			}
 
 			if msg.Retryable {
@@ -523,7 +525,7 @@ func crawl(crawlUrl string, includeSeries bool) (cr crawlResponseMsg) {
 			return
 		}
 
-		cr.ErrMsg = fmt.Sprintf("Server requested pause. Suspending for %d seconds.", cr.WaitFor)
+		cr.ErrMsg = "Server requested pause."
 		cr.Retryable = true
 		return
 	}
