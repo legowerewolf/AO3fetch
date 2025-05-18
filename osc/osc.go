@@ -1,13 +1,13 @@
 package osc
 
 import (
-	"strconv"
+	"fmt"
 )
 
 func SetProgress(state int, progress float64) string {
-	return "\x1b]9;4;" + strconv.Itoa(state) + ";" + strconv.Itoa(int(progress*100)) + "\x07"
+	return fmt.Sprintf("\x1b]9;4;%d;%3.0f\x07", state, progress)
 }
 
 func SetTitle(title string) string {
-	return "\x1b]0;" + title + "\x07"
+	return fmt.Sprintf("\x1b]0;%s\x07", title)
 }
