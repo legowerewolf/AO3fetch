@@ -1,0 +1,29 @@
+name: Bug Report
+description: File a bug report
+
+labels:
+  - bug
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What's the output when you run `ao3fetch -version`?
+    validations:
+      required: true
+
+  - type: input
+    id: command
+    attributes:
+      label: What command did you run?
+      description: ⚠️ DO NOT GIVE ME YOUR PASSWORD! ⚠️
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What happened?
+      description: Copy-pasted logs and/or a screenshot are very helpful!
+    validations:
+      required: true
