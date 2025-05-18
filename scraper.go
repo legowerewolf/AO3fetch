@@ -322,6 +322,7 @@ func (m runtimeModel) View() string {
 
 	stats := []string{
 		currentAction,
+		client.GetUser(),
 		fmt.Sprintf("ETA: %s", eta.Local().Format("15:04:05")),
 		fmt.Sprintf("Works discovered: %d", m.workSet.Cardinality()),
 		series,
