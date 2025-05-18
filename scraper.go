@@ -33,11 +33,11 @@ import (
 // global variables
 var client *ao3client.Ao3Client
 
-var isWorkMatcher = regexp.MustCompile(`/works/\d+`)
 var isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
-var isSpecialMatcher = regexp.MustCompile(`bookmarks|comments|collections|search|tags|users|transformative|chapters|kudos|navigate|share|view_full_work`)
 
-var linkSelector = mustParse("a")
+var workSelector = mustParseSelector(`.index .blurb .header .heading a[href^="/works/"]`)
+var seriesSelector = mustParseSelector(`.index .blurb .header .heading a[href^="/series/"], .index .blurb .series a[href^="/series/"]`)
+var paginationSelector = mustParseSelector(`.pagination li:nth-last-child(2) a`)
 
 const delayBackoffFactor = 1.3
 const delayDecayFactor = 0.9
@@ -211,13 +211,12 @@ type runtimeModel struct {
 	spin spinner.Model
 }
 
-func (m *runtimeModel) queueUrl(_url url.URL) bool {
-	uurl := _url.String()
+func (m *runtimeModel) queueUrl(url string) bool {
 
-	isNew := m.queueSet.Add(uurl)
+	isNew := m.queueSet.Add(url)
 
 	if isNew {
-		m.queue.PushBack(uurl)
+		m.queue.PushBack(url)
 	}
 
 	return isNew
@@ -248,7 +247,7 @@ func (m *runtimeModel) queueUrlRange(seedURL url.URL, endPage int) {
 		query.Set("page", strconv.Itoa(pageNum))
 		seedURL.RawQuery = query.Encode()
 
-		if added := m.queueUrl(seedURL); !added {
+		if added := m.queueUrl(seedURL.String()); !added {
 			break
 		}
 	}
@@ -268,7 +267,7 @@ func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, pages int)
 		m.queueUrlRange(seedURL, pages)
 	} else {
 		m.autodetectStop = true
-		m.queueUrl(seedURL)
+		m.queueUrl(seedURL.String())
 	}
 
 	m.prog = progress.New()
@@ -375,12 +374,12 @@ type crawlResponseMsg struct {
 	WaitFor   int // seconds
 
 	// success fields
-	AddWorks  []string
-	AddSeries []string
+	AddWorks         []string
+	AddSeries        []string
+	LastDetectedPage int
 }
 
 func (m runtimeModel) Init() tea.Cmd {
-
 	return tea.Batch(tick(), m.spin.Tick)
 }
 
@@ -420,7 +419,7 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m, tea.Batch(
 				tick(),
-				startCrawl(toCrawl),
+				startCrawl(toCrawl, m.includeSeries),
 			)
 		}
 
@@ -437,15 +436,14 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.workSet.Append(msg.AddWorks...)
 
-			if m.includeSeries {
-				for _, crawlable := range msg.AddSeries {
-					if m.seriesSet.Contains(crawlable) {
-						continue
-					}
+			for _, crawlable := range msg.AddSeries {
+				m.seriesSet.Add(crawlable)
+				m.queueUrl(crawlable)
+			}
 
-					m.seriesSet.Add(crawlable)
-					m.queue.PushBack(crawlable)
-				}
+			if msg.LastDetectedPage != 0 && (m.autodetectStop || isSeriesMatcher.MatchString(msg.CrawlUrl)) {
+				crawlUrl, _ := url.Parse(msg.CrawlUrl)
+				m.queueUrlRange(*crawlUrl, msg.LastDetectedPage)
 			}
 
 			m.currentDelay = time.Duration(delayDecayFactor * float32(max(m.delay, m.currentDelay)))
@@ -484,13 +482,15 @@ func tick() tea.Cmd {
 	})
 }
 
-func startCrawl(crawlUrl string) tea.Cmd {
+func startCrawl(crawlUrl string, includeSeries bool) tea.Cmd {
+	crawlUrlIsSeries := isSeriesMatcher.MatchString(crawlUrl)
+
 	return func() tea.Msg {
-		return crawl(crawlUrl)
+		return crawl(crawlUrl, includeSeries && !crawlUrlIsSeries)
 	}
 }
 
-func crawl(crawlUrl string) (cr crawlResponseMsg) {
+func crawl(crawlUrl string, includeSeries bool) (cr crawlResponseMsg) {
 	cr.CrawlUrl = crawlUrl
 
 	// make request, handle errors
@@ -546,36 +546,31 @@ func crawl(crawlUrl string) (cr crawlResponseMsg) {
 		return
 	}
 
-	crawledPageIsSeries := isSeriesMatcher.MatchString(crawlUrl)
+	for _, node := range cascadia.QueryAll(dom, workSelector) {
+		href, _ := getHref(node)
 
-	for _, node := range cascadia.QueryAll(dom, linkSelector) {
-		href, err := getHref(node)
-		if err != nil {
-			continue
-		}
+		cr.AddWorks = append(cr.AddWorks, client.ToFullURL(href))
+	}
 
-		if isSpecialMatcher.MatchString(href) {
-			continue
-		}
+	if includeSeries {
+		for _, series := range cascadia.QueryAll(dom, seriesSelector) {
+			href, _ := getHref(series)
 
-		if isWorkMatcher.MatchString(href) {
-			cr.AddWorks = append(cr.AddWorks, client.ToFullURL(href))
-		} else if !crawledPageIsSeries && isSeriesMatcher.MatchString(href) {
 			cr.AddSeries = append(cr.AddSeries, client.ToFullURL(href))
 		}
+	}
 
-		if crawledPageIsSeries {
-			for _, attr := range node.Attr {
-				if attr.Key != "rel" {
-					continue
-				}
+	lastPage := cascadia.Query(dom, paginationSelector)
+	if lastPage != nil {
+		href, _ := getHref(lastPage)
 
-				if attr.Val == "next" {
-					cr.AddSeries = append(cr.AddSeries, client.ToFullURL(href))
-					break
-				}
-			}
-		}
+		u, _ := url.Parse(href)
+
+		pNumS := u.Query().Get("page")
+
+		pNum, _ := strconv.Atoi(pNumS)
+
+		cr.LastDetectedPage = pNum
 	}
 
 	cr.Success = true
@@ -594,8 +589,9 @@ func getHref(t *html.Node) (string, error) {
 func remainingLines(m *runtimeModel, doc *strings.Builder) int {
 	return m.height - strings.Count(doc.String(), "\n") - 1
 }
-func mustParse(selector string) cascadia.Sel {
-	sel, err := cascadia.Parse(selector)
+
+func mustParseSelector(selector string) cascadia.Matcher {
+	sel, err := cascadia.ParseGroup(selector)
 
 	if err != nil {
 		panic(err)
