@@ -170,6 +170,8 @@ func main() {
 
 	if outputFileHandle != nil {
 		workOutputTarget = outputFileHandle
+
+		log.Printf("Writing to file %s...", outputFile)
 	} else {
 		workOutputTarget = log.Writer()
 	}
