@@ -2,9 +2,26 @@
 
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/legowerewolf/AO3fetch?sort=semver&style=flat-square&label=latest%20release)![download count badge](https://img.shields.io/github/downloads/legowerewolf/ao3fetch/latest/total?sort=semver&style=flat-square&label=downloads)](https://github.com/legowerewolf/AO3fetch/releases/latest)
 
-Tool for collecting work URLs from AO3 list views. Designed for use with the
-[FanFicFare](https://github.com/JimmXinu/FanFicFare) extension for
-[Calibre](https://calibre-ebook.com/).
+Tool for collecting work URLs from AO3 list views.
+
+## What's this for?
+
+This is the last step in a chain of tools for keeping your own personal backups
+of your favorite works. Because we've all seen "This work has been deleted!" in
+our bookmarks and cried.
+
+- [Calibre](https://calibre-ebook.com/) is software for managing a personal
+  ebook library. It doesn't care where they're from; any ebook files are fair
+  game. Imported ebooks can be searched by title, author, user-assigned tags,
+  and the full text of the book.
+
+- [FanFicFare](https://github.com/JimmXinu/FanFicFare) is a plugin for Calibre
+  that can download a work and populate its metadata when given a work URL.
+  (This includes tags, which Calibre can't read out of a manually-downloaded
+  work.) It can also check for updates for works that its imported.
+
+- **This tool** takes the URL of an index page on AO3 and retrieves all the work
+  URLs from it so that you can copy-paste them _en masse_ into FanFicFare.
 
 ## Arguments
 
@@ -29,15 +46,16 @@ Also available with the `-help` flag, or when run with no arguments.
 
 ### Errata
 
-- Values can be given in the form `-flag=value` (all flags) or `-flag value`
+- Arguments can be given in the form `-flag=value` (all flags) or `-flag value`
   (non-boolean flags).
-- The minimum value for `-delay` is `10` seconds. Thou shalt not crash the
-  Archive.
+- The minimum value for `-delay` is `10` seconds.
 - If you set `-pages` to `-1`, it'll automatically determine the page count.
-- If your `-url` includes a `page=n` parameter, it'll start from that page.
+- If your `-url` includes a `page=n` query parameter, it'll start from that
+  page.
 - If you _don't_ want to include series in your crawl, use `-series=false`.
 - It supports the official alternate URLs for the Archive:
   https://archiveofourown.gay and https://archive.transformativeworks.org.
+- You cannot `-login` to an insecure `-url`.
 
 See the
 [flags package documentation](https://pkg.go.dev/flag#hdr-Command_line_flag_syntax)
@@ -45,7 +63,7 @@ for syntax details.
 
 ## Notes for AO3 Maintainers
 
-- This crawler uses the user-agent string
+- This tool uses the user-agent string
   `AO3Fetch/[commit] (+https://github.com/legowerewolf/AO3fetch)`.
-- The crawler enforces a maximum request rate of 1 request per 10 seconds.
-- It will obey `Retry-After` headers if they are set in the response.
+- There is an enforced maximum request rate of 1 request per 10 seconds.
+- `Retry-After` headers are obeyed.
