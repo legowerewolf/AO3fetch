@@ -17,6 +17,7 @@ permissions: read-all
 
 jobs:
   build:
+    name: Build
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -72,6 +73,7 @@ jobs:
       - name: Publish to WinGet
         env:
           WINGET_CREATE_GITHUB_TOKEN: ${{secrets.WINGET_CREATE_GITHUB_TOKEN}}
+          GH_TOKEN: ${{ github.token }}
         run: |
           $release = gh api ${{github.event.release.url}} | ConvertFrom-Json
 
@@ -82,4 +84,4 @@ jobs:
           $arm64Url = $release.assets | Where-Object -Property label -Match windows-arm64 | Select-Object -ExpandProperty browser_download_url
 
           Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
-          .\wingetcreate.exe update $wingetPackage --submit --version $version --urls "$x86Url|x86" "$x64Url|x64" "$arm64Url|arm64"
+          .\wingetcreate.exe update legowerewolf.AO3Fetch --submit --version $version --urls "$x86Url|x86" "$x64Url|x64" "$arm64Url|arm64"
