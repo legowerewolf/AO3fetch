@@ -123,6 +123,10 @@ func main() {
 			log.Fatal("Credentials provided but could not split username from password. Did you include a colon?")
 		}
 
+		if len(username) == 0 || len(pass) == 0 {
+			log.Fatal("Username or password was empty.")
+		}
+
 		log.Println("Logging in as " + username + "...")
 
 		err := client.Authenticate(username, pass)
