@@ -13,6 +13,8 @@ on:
     types:
       - published
 
+permissions: read-all
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,6 +25,8 @@ jobs:
         exclude:
           - platform: darwin
             arch: 386
+    permissions:
+      contents: write
     steps:
       - name: Set up repo
         uses: actions/checkout@v4
@@ -41,14 +45,14 @@ jobs:
           GOARCH: ${{ matrix.arch }}
           REFNAME: ${{ github.ref_name }}
 
-      - name: Store builds
+      - name: Store build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}
           path: release/*
           overwrite: true
 
-      - name: Upload binaries to release
+      - name: Upload artifacts to release
         run: |
           binary=(release/*)
           archive=ao3fetch-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip
@@ -57,3 +61,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         if: github.event_name == 'release'
+
+  winget-release:
+    name: Publish to WinGet
+    needs: build
+    runs-on: windows-latest
+    if:
+      github.event_name == 'release' && github.event.release.prerelease == false
+    steps:
+      - name: Publish to WinGet
+        env:
+          WINGET_CREATE_GITHUB_TOKEN: ${{secrets.WINGET_CREATE_GITHUB_TOKEN}}
+        run: |
+          $release = gh api ${{github.event.release.url}} | ConvertFrom-Json
+
+          $version = $release.tag_name -ireplace "^v"
+
+          $x86Url   = $release.assets | Where-Object -Property label -Match windows-386   | Select-Object -ExpandProperty browser_download_url
+          $x64Url   = $release.assets | Where-Object -Property label -Match windows-amd64 | Select-Object -ExpandProperty browser_download_url
+          $arm64Url = $release.assets | Where-Object -Property label -Match windows-arm64 | Select-Object -ExpandProperty browser_download_url
+
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          .\wingetcreate.exe update $wingetPackage --submit --version $version --urls "$x86Url|x86" "$x64Url|x64" "$arm64Url|arm64"

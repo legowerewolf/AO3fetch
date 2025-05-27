@@ -23,6 +23,22 @@ our bookmarks and cried.
 - **This tool** takes the URL of an index page on AO3 and retrieves all the work
   URLs from it so that you can copy-paste them _en masse_ into FanFicFare.
 
+## Installation
+
+Windows users can install and update through WinGet, the Windows package
+manager:
+
+```shell
+> winget install legowerewolf.AO3Fetch
+```
+
+Users on other platforms can download the latest release from the releases page
+and use it in-place or add it to their system path.
+
+If it's added to other package managers, and you want new releases to be
+published there automatically, file a ticket and we'll see what I can put into
+the release action.
+
 ## Arguments
 
 Also available with the `-help` flag, or when run with no arguments.
