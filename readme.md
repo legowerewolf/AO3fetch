@@ -28,8 +28,8 @@ our bookmarks and cried.
 Windows users can install and update through WinGet, the Windows package
 manager:
 
-```shell
-> winget install legowerewolf.AO3Fetch
+```sh
+winget install legowerewolf.AO3Fetch
 ```
 
 Users on other platforms can download the latest release from the releases page
