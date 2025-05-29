@@ -2,19 +2,13 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/net/html"
 
 	"github.com/andybalholm/cascadia"
 	"github.com/charmbracelet/bubbles/progress"
@@ -23,168 +17,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gammazero/deque"
-
-	"github.com/legowerewolf/AO3fetch/ao3client"
-	"github.com/legowerewolf/AO3fetch/buildinfo"
 	"github.com/legowerewolf/AO3fetch/logbuffer"
 	"github.com/legowerewolf/AO3fetch/osc"
+	"golang.org/x/net/html"
 )
 
-// global variables
-var client *ao3client.Ao3Client
-
-var isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
-
-var workSelector = mustParseSelector(`.index .blurb .header .heading a[href^="/works/"]`)
-var seriesSelector = mustParseSelector(`.index .blurb .header .heading a[href^="/series/"], .index .blurb .series a[href^="/series/"]`)
-var paginationSelector = mustParseSelector(`.pagination li:nth-last-child(2) a`)
-
-const delayBackoffFactor = 1.3
-const delayDecayFactor = 0.9
-
-func main() {
-	// parse flags
-	var (
-		seedURLRaw, credentials, outputFile string
-		pages, delay                        int
-		includeSeries, showVersionAndQuit   bool
-	)
-	flag.BoolVar(&showVersionAndQuit, "version", false, "Show version information and quit.")
-	flag.StringVar(&seedURLRaw, "url", "", "URL to start crawling from.")
-	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl.")
-	flag.BoolVar(&includeSeries, "series", true, "Discover and crawl series.")
-	flag.IntVar(&delay, "delay", 10, "Delay between requests in seconds.")
-	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password.")
-	flag.StringVar(&outputFile, "outputFile", "", "Filename to write collected work URLs to instead of standard output.")
-	flag.Parse()
-
-	if flag.NFlag() == 0 {
-		fmt.Println("AO3Fetch by @legowerewolf - https://github.com/legowerewolf/AO3fetch")
-		fmt.Println()
-		flag.PrintDefaults()
-		return
-	}
-
-	// Check parameters
-
-	if showVersionAndQuit {
-		settings, err := buildinfo.GetBuildSettings()
-		if err != nil {
-			log.Fatal("Failed to read build info: ", err)
-		}
-
-		fmt.Printf("%s (%s:%s) for %s %s-%s\n", (*settings)["vcs.revision.refName"], (*settings)["vcs"], (*settings)["vcs.revision.withModified"], (*settings)["GOVERSION"], (*settings)["GOOS"], (*settings)["GOARCH.withVersion"])
-
-		return
-	}
-
-	var seedURL *url.URL
-
-	if seedURLRaw == "" {
-		log.Fatal("No URL provided.")
-	} else {
-		var err error
-		seedURL, err = url.Parse(seedURLRaw)
-		if err != nil {
-			log.Fatal("Invalid URL provided: ", seedURLRaw)
-		}
-
-	}
-
-	if delay < 10 {
-		log.Fatal("Delay must be greater than or equal to 10.")
-	}
-
-	var outputFileHandle *os.File
-	if outputFile != "" {
-		var err error
-		outputFileHandle, err = os.OpenFile(outputFile, os.O_CREATE|os.O_RDWR, os.ModePerm)
-		if err != nil {
-			log.Fatal("Failed to open output file for writing: ", err)
-		}
-		defer outputFileHandle.Close()
-	}
-
-	// initialize client so we can check credentials if they're provided
-	var err error
-	client, err = ao3client.NewAo3Client(seedURLRaw)
-	if err != nil {
-		log.Fatal("AO3 client initialization failed: ", err)
-	}
-
-	if credentials != "" {
-		if seedURL.Scheme != "https" {
-			log.Fatal("Credentials cannot be used with insecure URLs.")
-		}
-
-		username, pass, found := strings.Cut(credentials, ":")
-
-		if !found {
-			log.Fatal("Credentials provided but could not split username from password. Did you include a colon?")
-		}
-
-		if len(username) == 0 || len(pass) == 0 {
-			log.Fatal("Username or password was empty.")
-		}
-
-		log.Println("Logging in as " + username + "...")
-
-		err := client.Authenticate(username, pass)
-		if err != nil {
-			log.Fatal("Authentication failure. Check your credentials and try again.")
-		}
-
-		log.Println("Login successful.")
-	}
-
-	if pages < 1 && pages != -1 {
-		log.Fatal("Number of pages must be -1 (autodetect) or greater than 0.")
-	}
-
-	// parameters all check out, finish initializing
-
-	// initialization done, start scraping
-
-	log.Println("Scrape parameters: ")
-	fmt.Println("URL:     ", seedURL)
-	fmt.Println("Pages:   ", pages)
-	fmt.Println("Series?: ", includeSeries)
-	fmt.Println("Delay:   ", delay)
-
-	p := tea.NewProgram(initRuntimeModel(includeSeries, delay, *seedURL, pages), tea.WithAltScreen())
-
-	r, err := p.Run()
-	fmt.Print(osc.SetProgress(0, 0))
-	fmt.Print(osc.SetTitle("AO3Fetch"))
-	if err != nil {
-		log.Fatal("Tea program quit: ", err)
-	}
-
-	rModel := r.(runtimeModel)
-
-	fmt.Println()
-	fmt.Println("Runtime logs:")
-	rModel.logs.Dump(os.Stdout)
-
-	fmt.Println()
-	log.Printf("Found %d works across %d pages. \n", rModel.workSet.Cardinality(), rModel.pagesCrawled)
-	fmt.Println()
-
-	var workOutputTarget io.Writer
-
-	if outputFileHandle != nil {
-		workOutputTarget = outputFileHandle
-
-		log.Printf("Writing to file %s...", outputFile)
-	} else {
-		workOutputTarget = log.Writer()
-	}
-
-	for url := range rModel.workSet.Iter() {
-		fmt.Fprintln(workOutputTarget, url)
-	}
-
-}
+// region runtime model
 
 type runtimeModel struct {
 	// config properties
@@ -217,49 +55,6 @@ type runtimeModel struct {
 	spin spinner.Model
 }
 
-func (m *runtimeModel) queueUrl(url string) bool {
-
-	isNew := m.queueSet.Add(url)
-
-	if isNew {
-		m.queue.PushBack(url)
-	}
-
-	return isNew
-}
-
-func getPageNum(u url.URL) int {
-	str := u.Query().Get("page")
-
-	if str == "" {
-		return 1
-	}
-
-	i, err := strconv.Atoi(str)
-
-	if err != nil {
-		return 1
-	}
-
-	return i
-}
-
-func (m *runtimeModel) queueUrlRange(seedURL url.URL, endPage int) {
-	startPage := getPageNum(seedURL)
-
-	query := seedURL.Query()
-
-	for pageNum := endPage; pageNum >= startPage; pageNum-- {
-		query.Set("page", strconv.Itoa(pageNum))
-		seedURL.RawQuery = query.Encode()
-
-		if added := m.queueUrl(seedURL.String()); !added {
-			break
-		}
-	}
-
-}
-
 func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, pages int) (m runtimeModel) {
 	m.includeSeries = includeSeries
 	m.delay = time.Duration(delay) * time.Second
@@ -288,10 +83,32 @@ func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, pages int)
 	return
 }
 
-func (m runtimeModel) View() string {
+// region messages
 
+type tickMsg struct{}
+
+type crawlResponseMsg struct {
+	CrawlUrl string
+	Success  bool
+
+	// fail fields
+	Retryable bool
+	Fatal     bool
+	ErrMsg    string
+	WaitFor   int // seconds
+
+	// success fields
+	AddWorks         []string
+	AddSeries        []string
+	LastDetectedPage int
+}
+
+// region program view/init/update
+
+func (m runtimeModel) View() string {
 	doc := strings.Builder{}
 
+	// compute progress
 	var percent float64 = 0
 	if m.pagesCrawled > 0 {
 		percent = float64(m.pagesCrawled) / float64(m.pagesCrawled+m.queue.Len())
@@ -303,27 +120,33 @@ func (m runtimeModel) View() string {
 	doc.WriteString(lipgloss.NewStyle().MarginBottom(1).Render(m.prog.ViewAs(percent)) + "\n")
 
 	// current stats
+
+	// current action
 	currentAction := fmt.Sprintf("Requesting%s", m.spin.View())
 	if !m.crawlInProgress {
 		currentAction = fmt.Sprintf("Sleeping %s", time.Until(m.nextCrawlTime).Round(time.Second).String())
 	}
 
+	// estimated completion time
 	eta := m.nextCrawlTime
 	if m.crawlInProgress {
 		eta = time.Now()
 	}
 	eta = eta.Add(m.currentDelay * time.Duration(m.queue.Len()-1))
 
+	// total number of pages
 	totalPages := m.pagesCrawled + m.queue.Len()
 	if m.crawlInProgress {
 		totalPages += 1
 	}
 
+	// what to show for series
 	series := "Ignoring series"
 	if m.includeSeries {
 		series = fmt.Sprintf("Series discovered: %d", m.seriesSet.Cardinality())
 	}
 
+	// batch all of the stats above into one list
 	stats := []string{
 		currentAction,
 		client.GetUser(),
@@ -335,6 +158,7 @@ func (m runtimeModel) View() string {
 		fmt.Sprintf("Total pages: %d", totalPages),
 	}
 
+	// render all the stats to a block of text
 	statBlock := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderTop(true).
@@ -355,8 +179,11 @@ func (m runtimeModel) View() string {
 	leftCol := lipgloss.JoinVertical(lipgloss.Center, statBlock, helpMsg)
 
 	// logs
+
+	// get the right number of log lines
 	logLines := m.logs.GetAtMostFromEnd(max(remainingLines(&m, &doc), lipgloss.Height(leftCol)))
 
+	// produce a text block
 	logBlock := lipgloss.NewStyle().
 		MaxWidth(m.width - lipgloss.Width(leftCol)).
 		Render(strings.Join(logLines, "\n"))
@@ -366,24 +193,6 @@ func (m runtimeModel) View() string {
 
 	// write everything to screen
 	return doc.String()
-}
-
-type tickMsg struct{}
-
-type crawlResponseMsg struct {
-	CrawlUrl string
-	Success  bool
-
-	// fail fields
-	Retryable bool
-	Fatal     bool
-	ErrMsg    string
-	WaitFor   int // seconds
-
-	// success fields
-	AddWorks         []string
-	AddSeries        []string
-	LastDetectedPage int
 }
 
 func (m runtimeModel) Init() tea.Cmd {
@@ -485,6 +294,8 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// region commands
+
 func tick() tea.Cmd {
 	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
 		return tickMsg{}
@@ -498,6 +309,8 @@ func startCrawl(crawlUrl string, includeSeries bool) tea.Cmd {
 		return crawl(crawlUrl, includeSeries && !crawlUrlIsSeries)
 	}
 }
+
+// region other functions
 
 func crawl(crawlUrl string, includeSeries bool) (cr crawlResponseMsg) {
 	cr.CrawlUrl = crawlUrl
@@ -599,12 +412,44 @@ func remainingLines(m *runtimeModel, doc *strings.Builder) int {
 	return m.height - strings.Count(doc.String(), "\n") - 1
 }
 
-func mustParseSelector(selector string) cascadia.Matcher {
-	sel, err := cascadia.ParseGroup(selector)
+func (m *runtimeModel) queueUrl(url string) bool {
+	isNew := m.queueSet.Add(url)
 
-	if err != nil {
-		panic(err)
+	if isNew {
+		m.queue.PushBack(url)
 	}
 
-	return sel
+	return isNew
+}
+
+func getPageNum(u url.URL) int {
+	str := u.Query().Get("page")
+
+	if str == "" {
+		return 1
+	}
+
+	i, err := strconv.Atoi(str)
+
+	if err != nil {
+		return 1
+	}
+
+	return i
+}
+
+func (m *runtimeModel) queueUrlRange(seedURL url.URL, endPage int) {
+	startPage := getPageNum(seedURL)
+
+	query := seedURL.Query()
+
+	for pageNum := endPage; pageNum >= startPage; pageNum-- {
+		query.Set("page", strconv.Itoa(pageNum))
+		seedURL.RawQuery = query.Encode()
+
+		if added := m.queueUrl(seedURL.String()); !added {
+			break
+		}
+	}
+
 }
