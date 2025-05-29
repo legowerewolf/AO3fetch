@@ -48,7 +48,7 @@ jobs:
           zip $archive ${binary[0]}
           gh release upload ${{ github.ref_name }} $archive#${{ matrix.platform }}-${{ matrix.arch }}
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: github.event_name == 'release'
 
   winget:
@@ -61,7 +61,7 @@ jobs:
       - name: Publish to WinGet
         env:
           WINGET_CREATE_GITHUB_TOKEN: ${{secrets.WINGET_CREATE_GITHUB_TOKEN}}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $release = gh api ${{github.event.release.url}} | ConvertFrom-Json
 
@@ -72,4 +72,4 @@ jobs:
           $arm64Url = $release.assets | Where-Object -Property label -Match windows-arm64 | Select-Object -ExpandProperty browser_download_url
 
           Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
-          .\wingetcreate.exe update legowerewolf.AO3Fetch --submit --version $version --urls "$x86Url|x86" "$x64Url|x64" "$arm64Url|arm64"
+          .\wingetcreate.exe update ${{vars.WINGET_PACKAGE_NAME}} --submit --version $version --urls "$x86Url|x86" "$x64Url|x64" "$arm64Url|arm64"
