@@ -1,14 +1,9 @@
 # This workflow will build a golang project
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
 
-name: Build
+name: Release
 
 on:
-  push:
-    paths:
-      - "**.go"
-      - go.mod
-      - go.sum
   release:
     types:
       - published
@@ -16,8 +11,8 @@ on:
 permissions: read-all
 
 jobs:
-  build:
-    name: Build
+  github:
+    name: Build and upload release artifacts to GitHub
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -46,13 +41,6 @@ jobs:
           GOARCH: ${{ matrix.arch }}
           REFNAME: ${{ github.ref_name }}
 
-      - name: Store build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}
-          path: release/*
-          overwrite: true
-
       - name: Upload artifacts to release
         run: |
           binary=(release/*)
@@ -63,9 +51,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         if: github.event_name == 'release'
 
-  winget-release:
+  winget:
     name: Publish to WinGet
-    needs: build
+    needs: github
     runs-on: windows-latest
     if:
       github.event_name == 'release' && github.event.release.prerelease == false
