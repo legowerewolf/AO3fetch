@@ -17,9 +17,6 @@ import (
 	"github.com/legowerewolf/AO3fetch/osc"
 )
 
-// global variables
-var client *ao3client.Ao3Client
-
 func main() {
 	// parse flags
 	var (
@@ -85,7 +82,7 @@ func main() {
 
 	// initialize client so we can check credentials if they're provided
 	var err error
-	client, err = ao3client.NewAo3Client(seedURLRaw)
+	client, err := ao3client.NewAo3Client(seedURLRaw)
 	if err != nil {
 		log.Fatal("AO3 client initialization failed: ", err)
 	}
