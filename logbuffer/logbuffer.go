@@ -37,12 +37,15 @@ func (l LogBuffer) Write(p []byte) (n int, err error) {
 }
 
 func (l LogBuffer) GetAtMostFromEnd(lines int) []string {
+	if lines <= 0 {
+		return []string{}
+	}
+
 	if lines > len(*l.stream) {
 		return *l.stream
 	}
 
 	return (*l.stream)[len(*l.stream)-lines:]
-
 }
 
 func (l LogBuffer) Dump(writer io.Writer) {
