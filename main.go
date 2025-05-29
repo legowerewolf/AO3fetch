@@ -5,34 +5,20 @@ import (
 	"fmt"
 	"io"
 	"log"
-
 	"net/url"
 	"os"
-	"regexp"
-
 	"strings"
-
-	"github.com/andybalholm/cascadia"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/legowerewolf/AO3fetch/ao3client"
 	"github.com/legowerewolf/AO3fetch/buildinfo"
-
+	"github.com/legowerewolf/AO3fetch/crawler"
 	"github.com/legowerewolf/AO3fetch/osc"
 )
 
 // global variables
 var client *ao3client.Ao3Client
-
-var isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
-
-var workSelector = mustParseSelector(`.index .blurb .header .heading a[href^="/works/"]`)
-var seriesSelector = mustParseSelector(`.index .blurb .header .heading a[href^="/series/"], .index .blurb .series a[href^="/series/"]`)
-var paginationSelector = mustParseSelector(`.pagination li:nth-last-child(2) a`)
-
-const delayBackoffFactor = 1.3
-const delayDecayFactor = 0.9
 
 func main() {
 	// parse flags
@@ -143,7 +129,7 @@ func main() {
 	fmt.Println("Series?: ", includeSeries)
 	fmt.Println("Delay:   ", delay)
 
-	p := tea.NewProgram(initRuntimeModel(includeSeries, delay, *seedURL, pages), tea.WithAltScreen())
+	p := tea.NewProgram(crawler.InitRuntimeModel(includeSeries, delay, *seedURL, pages, client), tea.WithAltScreen())
 
 	r, err := p.Run()
 	fmt.Print(osc.SetProgress(0, 0))
@@ -152,14 +138,14 @@ func main() {
 		log.Fatal("Tea program quit: ", err)
 	}
 
-	rModel := r.(runtimeModel)
+	rModel := r.(crawler.RuntimeModel)
 
 	fmt.Println()
 	fmt.Println("Runtime logs:")
-	rModel.logs.Dump(os.Stdout)
+	rModel.Logs.Dump(os.Stdout)
 
 	fmt.Println()
-	log.Printf("Found %d works across %d pages. \n", rModel.workSet.Cardinality(), rModel.pagesCrawled)
+	log.Printf("Found %d works across %d pages. \n", rModel.GetWorkCount(), rModel.GetPagesCrawled())
 	fmt.Println()
 
 	var workOutputTarget io.Writer
@@ -172,18 +158,8 @@ func main() {
 		workOutputTarget = log.Writer()
 	}
 
-	for url := range rModel.workSet.Iter() {
+	for url := range rModel.GetWorks() {
 		fmt.Fprintln(workOutputTarget, url)
 	}
 
-}
-
-func mustParseSelector(selector string) cascadia.Matcher {
-	sel, err := cascadia.ParseGroup(selector)
-
-	if err != nil {
-		panic(err)
-	}
-
-	return sel
 }

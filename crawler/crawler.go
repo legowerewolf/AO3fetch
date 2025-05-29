@@ -1,4 +1,4 @@
-package main
+package crawler
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -17,14 +18,28 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/gammazero/deque"
+	"github.com/legowerewolf/AO3fetch/ao3client"
 	"github.com/legowerewolf/AO3fetch/logbuffer"
 	"github.com/legowerewolf/AO3fetch/osc"
 	"golang.org/x/net/html"
 )
 
+// region consts
+
+const delayBackoffFactor = 1.3
+const delayDecayFactor = 0.9
+
+var isSeriesMatcher = regexp.MustCompile(`/series/\d+`)
+
+var workSelector = mustParseSelector(`.index .blurb .header .heading a[href^="/works/"]`)
+var seriesSelector = mustParseSelector(`.index .blurb .header .heading a[href^="/series/"], .index .blurb .series a[href^="/series/"]`)
+var paginationSelector = mustParseSelector(`.pagination li:nth-last-child(2) a`)
+
 // region runtime model
 
-type runtimeModel struct {
+type RuntimeModel struct {
+	client ao3client.Ao3Client
+
 	// config properties
 	includeSeries  bool
 	autodetectStop bool
@@ -38,7 +53,7 @@ type runtimeModel struct {
 	pagesCrawled int
 
 	// logging
-	logs   logbuffer.LogBuffer
+	Logs   logbuffer.LogBuffer
 	logger *log.Logger
 
 	// control
@@ -55,7 +70,7 @@ type runtimeModel struct {
 	spin spinner.Model
 }
 
-func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, pages int) (m runtimeModel) {
+func InitRuntimeModel(includeSeries bool, delay int, seedURL url.URL, pages int, client *ao3client.Ao3Client) (m RuntimeModel) {
 	m.includeSeries = includeSeries
 	m.delay = time.Duration(delay) * time.Second
 	m.currentDelay = m.delay
@@ -77,8 +92,8 @@ func initRuntimeModel(includeSeries bool, delay int, seedURL url.URL, pages int)
 	m.width = 80
 	m.height = 40
 
-	m.logs = logbuffer.NewLogBuffer()
-	m.logger = log.New(m.logs, "", log.Ltime)
+	m.Logs = logbuffer.NewLogBuffer()
+	m.logger = log.New(m.Logs, "", log.Ltime)
 
 	return
 }
@@ -105,7 +120,7 @@ type crawlResponseMsg struct {
 
 // region program view/init/update
 
-func (m runtimeModel) View() string {
+func (m RuntimeModel) View() string {
 	doc := strings.Builder{}
 
 	// compute progress
@@ -149,7 +164,7 @@ func (m runtimeModel) View() string {
 	// batch all of the stats above into one list
 	stats := []string{
 		currentAction,
-		client.GetUser(),
+		m.client.GetUser(),
 		fmt.Sprintf("ETA: %s", eta.Local().Format("15:04:05")),
 		fmt.Sprintf("Works discovered: %d", m.workSet.Cardinality()),
 		series,
@@ -181,7 +196,7 @@ func (m runtimeModel) View() string {
 	// logs
 
 	// get the right number of log lines
-	logLines := m.logs.GetAtMostFromEnd(max(remainingLines(&m, &doc), lipgloss.Height(leftCol)))
+	logLines := m.Logs.GetAtMostFromEnd(max(remainingLines(&m, &doc), lipgloss.Height(leftCol)))
 
 	// produce a text block
 	logBlock := lipgloss.NewStyle().
@@ -195,11 +210,11 @@ func (m runtimeModel) View() string {
 	return doc.String()
 }
 
-func (m runtimeModel) Init() tea.Cmd {
+func (m RuntimeModel) Init() tea.Cmd {
 	return tea.Batch(tick(), m.spin.Tick)
 }
 
-func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+func (m RuntimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -235,7 +250,7 @@ func (m runtimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m, tea.Batch(
 				tick(),
-				startCrawl(toCrawl, m.includeSeries),
+				startCrawl(&m.client, toCrawl, m.includeSeries),
 			)
 		}
 
@@ -302,17 +317,17 @@ func tick() tea.Cmd {
 	})
 }
 
-func startCrawl(crawlUrl string, includeSeries bool) tea.Cmd {
+func startCrawl(client *ao3client.Ao3Client, crawlUrl string, includeSeries bool) tea.Cmd {
 	crawlUrlIsSeries := isSeriesMatcher.MatchString(crawlUrl)
 
 	return func() tea.Msg {
-		return crawl(crawlUrl, includeSeries && !crawlUrlIsSeries)
+		return crawl(client, crawlUrl, includeSeries && !crawlUrlIsSeries)
 	}
 }
 
 // region other functions
 
-func crawl(crawlUrl string, includeSeries bool) (cr crawlResponseMsg) {
+func crawl(client *ao3client.Ao3Client, crawlUrl string, includeSeries bool) (cr crawlResponseMsg) {
 	cr.CrawlUrl = crawlUrl
 
 	// make request, handle errors
@@ -388,15 +403,21 @@ func crawl(crawlUrl string, includeSeries bool) (cr crawlResponseMsg) {
 
 		u, _ := url.Parse(href)
 
-		pNumS := u.Query().Get("page")
-
-		pNum, _ := strconv.Atoi(pNumS)
-
-		cr.LastDetectedPage = pNum
+		cr.LastDetectedPage = getPageNum(*u)
 	}
 
 	cr.Success = true
 	return
+}
+
+func mustParseSelector(selector string) cascadia.Matcher {
+	sel, err := cascadia.ParseGroup(selector)
+
+	if err != nil {
+		panic(err)
+	}
+
+	return sel
 }
 
 func getHref(t *html.Node) (string, error) {
@@ -408,11 +429,11 @@ func getHref(t *html.Node) (string, error) {
 	return "", errors.New("no href attribute found")
 }
 
-func remainingLines(m *runtimeModel, doc *strings.Builder) int {
+func remainingLines(m *RuntimeModel, doc *strings.Builder) int {
 	return m.height - strings.Count(doc.String(), "\n") - 1
 }
 
-func (m *runtimeModel) queueUrl(url string) bool {
+func (m *RuntimeModel) queueUrl(url string) bool {
 	isNew := m.queueSet.Add(url)
 
 	if isNew {
@@ -438,7 +459,7 @@ func getPageNum(u url.URL) int {
 	return i
 }
 
-func (m *runtimeModel) queueUrlRange(seedURL url.URL, endPage int) {
+func (m *RuntimeModel) queueUrlRange(seedURL url.URL, endPage int) {
 	startPage := getPageNum(seedURL)
 
 	query := seedURL.Query()
@@ -452,4 +473,16 @@ func (m *runtimeModel) queueUrlRange(seedURL url.URL, endPage int) {
 		}
 	}
 
+}
+
+func (m *RuntimeModel) GetWorkCount() int {
+	return m.workSet.Cardinality()
+}
+
+func (m *RuntimeModel) GetPagesCrawled() int {
+	return m.pagesCrawled
+}
+
+func (m *RuntimeModel) GetWorks() <-chan string {
+	return m.workSet.Iter()
 }
