@@ -472,7 +472,6 @@ func (m *RuntimeModel) queueUrlRange(seedURL url.URL, endPage int) {
 			break
 		}
 	}
-
 }
 
 func (m *RuntimeModel) GetWorkCount() int {
