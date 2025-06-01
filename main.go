@@ -14,6 +14,7 @@ import (
 	"github.com/legowerewolf/AO3fetch/ao3client"
 	"github.com/legowerewolf/AO3fetch/buildinfo"
 	"github.com/legowerewolf/AO3fetch/crawler"
+	interactivelogin "github.com/legowerewolf/AO3fetch/interactive_login"
 	"github.com/legowerewolf/AO3fetch/osc"
 )
 
@@ -92,21 +93,31 @@ func main() {
 			log.Fatal("Credentials cannot be used with insecure URLs.")
 		}
 
-		username, pass, found := strings.Cut(credentials, ":")
+		if credentials == "interactive" {
+			log.Println("Interactive login requested")
 
-		if !found {
-			log.Fatal("Credentials provided but could not split username from password. Did you include a colon?")
-		}
+			if !interactivelogin.Login(client) {
+				log.Fatal("Login failed")
+			}
 
-		if len(username) == 0 || len(pass) == 0 {
-			log.Fatal("Username or password was empty.")
-		}
+		} else {
+			username, pass, found := strings.Cut(credentials, ":")
 
-		log.Println("Logging in as " + username + "...")
+			if !found {
+				log.Fatal("Credentials provided but could not split username from password. Did you include a colon?")
+			}
 
-		err := client.Authenticate(username, pass)
-		if err != nil {
-			log.Fatal("Authentication failure. Check your credentials and try again.")
+			if len(username) == 0 || len(pass) == 0 {
+				log.Fatal("Username or password was empty.")
+			}
+
+			log.Println("Logging in as " + username + "...")
+
+			err := client.Authenticate(username, pass)
+			if err != nil {
+				log.Fatal("Authentication failure. Check your credentials and try again.")
+			}
+
 		}
 
 		log.Println("Login successful.")

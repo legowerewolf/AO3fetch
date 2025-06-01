@@ -1,0 +1,169 @@
+package interactivelogin
+
+import (
+	"fmt"
+	"log"
+	"strings"
+
+	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/legowerewolf/AO3fetch/ao3client"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+func Login(client *ao3client.Ao3Client) bool {
+
+	m := newModel(client)
+
+	p := tea.NewProgram(m)
+
+	result, err := p.Run()
+	if err != nil {
+		log.Fatal("interactive login error: ", err)
+	}
+
+	modelResult := result.(model)
+
+	return modelResult.success
+
+}
+
+type model struct {
+	client *ao3client.Ao3Client
+
+	inputs  []textinput.Model
+	focused int
+
+	success bool
+}
+
+func newModel(client *ao3client.Ao3Client) model {
+
+	usernameInput := textinput.New()
+	usernameInput.Prompt = "Username >"
+
+	passwordInput := textinput.New()
+	passwordInput.Prompt = "Password >"
+	passwordInput.EchoMode = textinput.EchoPassword
+	passwordInput.EchoCharacter = '*'
+
+	inputs := []textinput.Model{
+		usernameInput,
+		passwordInput,
+	}
+
+	m := model{
+		client:  client,
+		inputs:  inputs,
+		focused: 0,
+	}
+
+	m.inputs[m.focused].Focus()
+
+	return m
+}
+
+func (m model) Init() tea.Cmd {
+	return textinput.Blink
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "esc":
+			return m, tea.Quit
+
+		case "up", "shift+tab":
+			m.focused--
+			if m.focused < 0 {
+				m.focused = len(m.inputs) - 1
+			}
+
+			return m, m.updateFocus()
+
+		case "down", "tab":
+			m.focused++
+			if m.focused >= len(m.inputs) {
+				m.focused = 0
+			}
+
+			return m, m.updateFocus()
+
+		case "enter":
+			m.focused = -1
+			return m, tea.Batch(m.updateFocus(), m.attemptLogin())
+		}
+	case loginSuccessMsg:
+		m.success = true
+		return m, tea.Quit
+
+	case loginFailedMsg:
+		m.focused = 0
+		return m, m.updateFocus()
+
+	}
+
+	return m, m.updateInputs(msg)
+}
+
+func (m *model) updateInputs(msg tea.Msg) tea.Cmd {
+	cmds := make([]tea.Cmd, len(m.inputs))
+
+	for i := range m.inputs {
+		m.inputs[i], cmds[i] = m.inputs[i].Update(msg)
+	}
+
+	return tea.Batch(cmds...)
+}
+
+func (m *model) updateFocus() tea.Cmd {
+	cmds := make([]tea.Cmd, len(m.inputs))
+
+	for i := range m.inputs {
+		if i == m.focused {
+			cmds[i] = m.inputs[i].Focus()
+		} else {
+			m.inputs[i].Blur()
+		}
+	}
+
+	return tea.Batch(cmds...)
+}
+
+type loginFailedMsg struct{}
+type loginSuccessMsg struct{}
+
+func (m *model) attemptLogin() tea.Cmd {
+	return func() tea.Msg {
+
+		err := m.client.Authenticate(
+			m.inputs[0].Value(), m.inputs[1].Value(),
+		)
+
+		if err == nil {
+			return loginSuccessMsg{}
+		}
+
+		return loginFailedMsg{}
+	}
+}
+
+func (m model) View() string {
+
+	var b strings.Builder
+
+	for _, input := range m.inputs {
+		b.WriteString(fmt.Sprintln(input.View()))
+	}
+
+	var status = ""
+	if m.focused == -1 {
+		status = "Logging in..."
+	}
+
+	b.WriteString(fmt.Sprintln(status))
+
+	return b.String()
+}
