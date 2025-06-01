@@ -38,7 +38,7 @@ var paginationSelector = mustParseSelector(`.pagination li:nth-last-child(2) a`)
 // region runtime model
 
 type RuntimeModel struct {
-	client ao3client.Ao3Client
+	client *ao3client.Ao3Client
 
 	// config properties
 	includeSeries  bool
@@ -71,6 +71,8 @@ type RuntimeModel struct {
 }
 
 func InitRuntimeModel(includeSeries bool, delay int, seedURL url.URL, pages int, client *ao3client.Ao3Client) (m RuntimeModel) {
+	m.client = client
+
 	m.includeSeries = includeSeries
 	m.delay = time.Duration(delay) * time.Second
 	m.currentDelay = m.delay
@@ -250,7 +252,7 @@ func (m RuntimeModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m, tea.Batch(
 				tick(),
-				startCrawl(&m.client, toCrawl, m.includeSeries),
+				startCrawl(m.client, toCrawl, m.includeSeries),
 			)
 		}
 
