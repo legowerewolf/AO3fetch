@@ -94,10 +94,10 @@ func main() {
 		}
 
 		if credentials == "interactive" {
-			log.Println("Interactive login requested")
+			log.Println("Starting interactive login...")
 
 			if !interactivelogin.Login(client) {
-				log.Fatal("Login failed")
+				log.Fatal("Interactive login aborted.")
 			}
 
 		} else {
@@ -115,7 +115,7 @@ func main() {
 
 			err := client.Authenticate(username, pass)
 			if err != nil {
-				log.Fatal("Authentication failure. Check your credentials and try again.")
+				log.Fatal("Login failed. Check your credentials and try again.")
 			}
 
 		}
