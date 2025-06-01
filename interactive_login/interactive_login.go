@@ -33,6 +33,7 @@ type model struct {
 
 	inputs  []textinput.Model
 	focused int
+	status  string
 
 	success bool
 }
@@ -40,10 +41,10 @@ type model struct {
 func newModel(client *ao3client.Ao3Client) model {
 
 	usernameInput := textinput.New()
-	usernameInput.Prompt = "Username >"
+	usernameInput.Prompt = "Username > "
 
 	passwordInput := textinput.New()
-	passwordInput.Prompt = "Password >"
+	passwordInput.Prompt = "Password > "
 	passwordInput.EchoMode = textinput.EchoPassword
 	passwordInput.EchoCharacter = '*'
 
@@ -92,17 +93,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.updateFocus()
 
 		case "enter":
+			if m.focused == -1 {
+				return m, nil
+			}
+
 			m.focused = -1
+			m.status = "Logging in..."
 			return m, tea.Batch(m.updateFocus(), m.attemptLogin())
 		}
+
 	case loginSuccessMsg:
 		m.success = true
 		return m, tea.Quit
 
 	case loginFailedMsg:
 		m.focused = 0
+		m.status = "Login failed. Check your credentials and try again."
 		return m, m.updateFocus()
-
 	}
 
 	return m, m.updateInputs(msg)
@@ -158,12 +165,7 @@ func (m model) View() string {
 		b.WriteString(fmt.Sprintln(input.View()))
 	}
 
-	var status = ""
-	if m.focused == -1 {
-		status = "Logging in..."
-	}
-
-	b.WriteString(fmt.Sprintln(status))
+	b.WriteString(fmt.Sprintln(m.status))
 
 	return b.String()
 }
