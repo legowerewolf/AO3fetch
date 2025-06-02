@@ -121,6 +121,8 @@ func main() {
 		}
 
 		log.Println("Login successful.")
+
+		credentials = ""
 	}
 
 	if pages < 1 && pages != -1 {
