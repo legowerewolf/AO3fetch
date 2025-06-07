@@ -25,18 +25,33 @@ our bookmarks and cried.
 
 ## Installation
 
-Windows users can install and update through WinGet, the Windows package
-manager:
+- Windows users can install and update through
+  [WinGet, the Windows package manager](https://learn.microsoft.com/en-us/windows/package-manager/winget/):
 
-```sh
-winget install legowerewolf.AO3Fetch
-```
+  ```sh
+  winget install legowerewolf.AO3Fetch
+  ```
 
-Users on other platforms can download the latest release from the releases page
-and use it in-place or add it to their system path.
+  Updates are submitted to the WinGet community repository as part of the
+  release process. It may take a day or two for updates to be approved and
+  published.
+
+- Mac and Linux users can install and update through
+  [Homebrew](https://brew.sh/):
+
+  ```sh
+  brew install legowerewolf/tap/ao3fetch
+  ```
+
+  I manually publish updates to my
+  [Homebrew Tap](https://github.com/legowerewolf/homebrew-tap).
+
+- Users on other platforms can
+  [download the latest release for their platform from the releases page](https://github.com/legowerewolf/AO3fetch/releases/latest)
+  and use it in-place or add it to their system path.
 
 If it's added to other package managers, and you want new releases to be
-published there automatically, file a ticket and we'll see what I can put into
+published there automatically, submit an issue and we'll see what I can put into
 the release action.
 
 ## Arguments
