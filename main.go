@@ -30,7 +30,7 @@ func main() {
 	flag.IntVar(&pages, "pages", 1, "Number of pages to crawl.")
 	flag.BoolVar(&includeSeries, "series", true, "Discover and crawl series.")
 	flag.IntVar(&delay, "delay", 10, "Delay between requests in seconds.")
-	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password.")
+	flag.StringVar(&credentials, "login", "", "Login credentials in the form of username:password, or \"interactive\" for interactive login.")
 	flag.StringVar(&outputFile, "outputFile", "", "Filename to write collected work URLs to instead of standard output.")
 	flag.Parse()
 

@@ -47,7 +47,7 @@ Also available with the `-help` flag, or when run with no arguments.
   -delay int
         Delay between requests in seconds. (default 10)
   -login string
-        Login credentials in the form of username:password.
+        Login credentials in the form of username:password, or "interactive" for interactive login.
   -outputFile string
         Filename to write collected work URLs to instead of standard output.
   -pages int
