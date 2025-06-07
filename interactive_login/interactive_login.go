@@ -38,6 +38,8 @@ type model struct {
 	success bool
 }
 
+const defaultStatus = "↑/↓ to move fields / enter to login / esc to quit"
+
 func newModel(client *ao3client.Ao3Client) model {
 
 	usernameInput := textinput.New()
@@ -57,6 +59,7 @@ func newModel(client *ao3client.Ao3Client) model {
 		client:  client,
 		inputs:  inputs,
 		focused: 0,
+		status:  defaultStatus,
 	}
 
 	m.inputs[m.focused].Focus()
@@ -82,6 +85,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focused = len(m.inputs) - 1
 			}
 
+			m.status = defaultStatus
+
 			return m, m.updateFocus()
 
 		case "down", "tab":
@@ -89,6 +94,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focused >= len(m.inputs) {
 				m.focused = 0
 			}
+
+			m.status = defaultStatus
 
 			return m, m.updateFocus()
 
@@ -104,6 +111,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case loginSuccessMsg:
 		m.success = true
+		m.status = "Login successful!"
 		return m, tea.Quit
 
 	case loginFailedMsg:
