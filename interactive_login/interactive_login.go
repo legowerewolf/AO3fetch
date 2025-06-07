@@ -169,7 +169,6 @@ func (m *model) attemptLogin() tea.Cmd {
 }
 
 func (m model) View() string {
-
 	var b strings.Builder
 
 	for _, input := range m.inputs {
