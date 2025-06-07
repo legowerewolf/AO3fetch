@@ -133,7 +133,7 @@ func (m RuntimeModel) View() string {
 
 	// write progress bars
 	doc.WriteString(osc.SetProgress(1, percent))
-	doc.WriteString(osc.SetTitle(fmt.Sprintf("AO3Fetch - %d%%", int(percent*100))))
+	doc.WriteString(osc.SetTitle(fmt.Sprintf("AO3Fetch - %.0f%%", percent*100)))
 	doc.WriteString(lipgloss.NewStyle().MarginBottom(1).Render(m.prog.ViewAs(percent)) + "\n")
 
 	// current stats
