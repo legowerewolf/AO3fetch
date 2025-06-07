@@ -115,7 +115,7 @@ func (c *Ao3Client) getAo3Token() string {
 	var r map[string]interface{}
 	unmarshalErr := json.Unmarshal(text, &r)
 	if unmarshalErr != nil {
-		log.Fatal("Token parse failed: ", unmarshalErr)
+		log.Fatalf("Token parse failed: %s (value: %s)", unmarshalErr, string(text))
 	}
 
 	return r["token"].(string)
