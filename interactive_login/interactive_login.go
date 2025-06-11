@@ -74,14 +74,16 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "esc":
+			return m, tea.Quit
+		}
+
 		if m.focused == -1 {
 			return m, nil
 		}
 
 		switch msg.String() {
-		case "ctrl+c", "esc":
-			return m, tea.Quit
-
 		case "up", "shift+tab":
 			m.focused--
 			if m.focused < 0 {
