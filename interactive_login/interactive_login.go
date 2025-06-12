@@ -137,7 +137,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, realizedKeymap.up):
 			m.focused--
 			if m.focused < 0 {
-				m.focused = len(m.inputs) - 1
+				m.focused = 0
 			}
 
 			m.status = ""
@@ -147,7 +147,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, realizedKeymap.down):
 			m.focused++
 			if m.focused >= len(m.inputs) {
-				m.focused = 0
+				m.focused = len(m.inputs) - 1
 			}
 
 			m.status = ""
