@@ -242,7 +242,7 @@ func (m model) View() string {
 
 	b.WriteString(m.help.View(realizedKeymap))
 
-	style := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(0, 1)
+	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
 
 	return style.Render(b.String()) + "\n"
 }
