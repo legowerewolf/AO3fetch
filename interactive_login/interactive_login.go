@@ -5,7 +5,11 @@ import (
 	"log"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/legowerewolf/AO3fetch/ao3client"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -28,6 +32,43 @@ func Login(client *ao3client.Ao3Client) bool {
 
 }
 
+type keymap struct {
+	up    key.Binding
+	down  key.Binding
+	login key.Binding
+	exit  key.Binding
+}
+
+func (k keymap) ShortHelp() []key.Binding {
+	return []key.Binding{k.up, k.down, k.login, k.exit}
+}
+
+func (k keymap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.up, k.down},
+		{k.login, k.exit},
+	}
+}
+
+var realizedKeymap = keymap{
+	up: key.NewBinding(
+		key.WithKeys("up", "shift+tab"),
+		key.WithHelp("↑", "move up"),
+	),
+	down: key.NewBinding(
+		key.WithKeys("down", "tab"),
+		key.WithHelp("↓", "move down"),
+	),
+	login: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "login"),
+	),
+	exit: key.NewBinding(
+		key.WithKeys("esc", "ctrl+c"),
+		key.WithHelp("esc", "quit"),
+	),
+}
+
 type model struct {
 	client *ao3client.Ao3Client
 
@@ -36,9 +77,10 @@ type model struct {
 	status  string
 
 	success bool
-}
 
-const defaultStatus = "↑/↓ to move fields / enter to login / esc to quit"
+	spin spinner.Model
+	help help.Model
+}
 
 func newModel(client *ao3client.Ao3Client) model {
 
@@ -59,8 +101,13 @@ func newModel(client *ao3client.Ao3Client) model {
 		client:  client,
 		inputs:  inputs,
 		focused: 0,
-		status:  defaultStatus,
+		status:  "",
+
+		spin: spinner.New(spinner.WithSpinner(spinner.Ellipsis)),
+		help: help.New(),
 	}
+
+	m.help.Styles.ShortKey = lipgloss.NewStyle().Faint(true).Bold(true)
 
 	m.inputs[m.focused].Focus()
 
@@ -68,47 +115,52 @@ func newModel(client *ao3client.Ao3Client) model {
 }
 
 func (m model) Init() tea.Cmd {
-	return textinput.Blink
+	return tea.Batch(
+		textinput.Blink,
+		m.spin.Tick,
+	)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, realizedKeymap.exit):
+			return m, tea.Quit
+		}
+
 		if m.focused == -1 {
 			return m, nil
 		}
 
-		switch msg.String() {
-		case "ctrl+c", "esc":
-			return m, tea.Quit
-
-		case "up", "shift+tab":
+		switch {
+		case key.Matches(msg, realizedKeymap.up):
 			m.focused--
 			if m.focused < 0 {
-				m.focused = len(m.inputs) - 1
-			}
-
-			m.status = defaultStatus
-
-			return m, m.updateFocus()
-
-		case "down", "tab":
-			m.focused++
-			if m.focused >= len(m.inputs) {
 				m.focused = 0
 			}
 
-			m.status = defaultStatus
+			m.status = ""
 
 			return m, m.updateFocus()
 
-		case "enter":
+		case key.Matches(msg, realizedKeymap.down):
+			m.focused++
+			if m.focused >= len(m.inputs) {
+				m.focused = len(m.inputs) - 1
+			}
+
+			m.status = ""
+
+			return m, m.updateFocus()
+
+		case key.Matches(msg, realizedKeymap.login):
 			if m.focused == -1 {
 				return m, nil
 			}
 
 			m.focused = -1
-			m.status = "Logging in..."
+			m.status = "Logging in"
 			return m, tea.Batch(m.updateFocus(), m.attemptLogin())
 		}
 
@@ -121,6 +173,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.focused = 0
 		m.status = "Login failed. Check your credentials and try again."
 		return m, m.updateFocus()
+
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spin, cmd = m.spin.Update(msg)
+		return m, cmd
 	}
 
 	return m, m.updateInputs(msg)
@@ -171,11 +228,23 @@ func (m *model) attemptLogin() tea.Cmd {
 func (m model) View() string {
 	var b strings.Builder
 
+	b.WriteString(fmt.Sprintln("Credentials for", m.client.ToFullURL("/")))
+
+	// display all inputs
 	for _, input := range m.inputs {
 		b.WriteString(fmt.Sprintln(input.View()))
 	}
 
-	b.WriteString(fmt.Sprintln(m.status))
+	// status line
+	b.WriteString(m.status)
+	if m.focused == -1 && !m.success {
+		b.WriteString(m.spin.View())
+	}
+	b.WriteString("\n")
 
-	return b.String()
+	b.WriteString(m.help.View(realizedKeymap))
+
+	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
+
+	return style.Render(b.String()) + "\n"
 }
