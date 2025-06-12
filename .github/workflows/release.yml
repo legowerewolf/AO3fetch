@@ -73,3 +73,27 @@ jobs:
 
           Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
           .\wingetcreate.exe update ${{vars.WINGET_PACKAGE_NAME}} --submit --token $env:WINGET_CREATE_GITHUB_TOKEN --version $version --urls "$x86Url|x86" "$x64Url|x64" "$arm64Url|arm64"
+
+  homebrew:
+    name: Publish to Homebrew Tap
+    runs-on: ubuntu-latest
+    if:
+      github.event_name == 'release' && github.event.release.prerelease == false
+    steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+        with:
+          token: ${{ github.token }}
+
+      - name: Set up git
+        uses: Homebrew/actions/git-user-config@master
+
+      - name: Tap legowerewolf/tap
+        run: brew tap legowerewolf/tap
+
+      - name: Bump package
+        uses: Homebrew/actions/bump-packages@master
+        with:
+          token: ${{secrets.WINGET_CREATE_GITHUB_TOKEN}}
+          formulae: >
+            legowerewolf/tap/ao3fetch
