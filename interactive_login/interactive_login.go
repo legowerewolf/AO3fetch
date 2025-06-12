@@ -228,6 +228,8 @@ func (m *model) attemptLogin() tea.Cmd {
 func (m model) View() string {
 	var b strings.Builder
 
+	b.WriteString(fmt.Sprintln("Credentials for", m.client.ToFullURL("/")))
+
 	// display all inputs
 	for _, input := range m.inputs {
 		b.WriteString(fmt.Sprintln(input.View()))
