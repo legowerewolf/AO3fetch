@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.5
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/deckarep/golang-set/v2 v2.8.0
-	github.com/gammazero/deque v1.0.0
+	github.com/gammazero/deque v1.1.0
 	golang.org/x/net v0.41.0
 )
 
