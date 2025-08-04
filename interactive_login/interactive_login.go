@@ -1,6 +1,7 @@
 package interactivelogin
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -86,11 +87,27 @@ func newModel(client *ao3client.Ao3Client) model {
 
 	usernameInput := textinput.New()
 	usernameInput.Prompt = "Username > "
+	usernameInput.Validate = func(s string) error {
+		if s == "" {
+			return errors.New("username is required")
+		}
+
+		return nil
+	}
+	usernameInput.SetValue("")
 
 	passwordInput := textinput.New()
 	passwordInput.Prompt = "Password > "
 	passwordInput.EchoMode = textinput.EchoPassword
 	passwordInput.EchoCharacter = '*'
+	passwordInput.Validate = func(s string) error {
+		if s == "" {
+			return errors.New("password is required")
+		}
+
+		return nil
+	}
+	passwordInput.SetValue("")
 
 	inputs := []textinput.Model{
 		usernameInput,
@@ -157,6 +174,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, realizedKeymap.login):
 			if m.focused == -1 {
 				return m, nil
+			}
+
+			for idx, input := range m.inputs {
+				if input.Err != nil {
+					m.focused = idx
+					m.status = "Validation error: " + input.Err.Error()
+					return m, m.updateFocus()
+				}
 			}
 
 			m.focused = -1
