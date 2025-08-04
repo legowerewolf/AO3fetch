@@ -184,12 +184,12 @@ func (m RuntimeModel) View() string {
 		BorderBottom(true).
 		MarginRight(2).
 		Padding(1, 2).
-		Width(25).
 		Render(strings.Join(stats, "\n"))
 
 	// add help message
 	helpMsg := lipgloss.NewStyle().
 		Faint(true).
+		PaddingBottom(2).
 		Render("abort: esc / ctrl+c")
 
 	// group stat block and help message into column
