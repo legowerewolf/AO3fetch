@@ -56,6 +56,9 @@ type RuntimeModel struct {
 	Logs   logbuffer.LogBuffer
 	logger *log.Logger
 
+	// metadata
+	startTime time.Time
+
 	// control
 	nextCrawlTime   time.Time
 	currentDelay    time.Duration
@@ -96,6 +99,8 @@ func InitRuntimeModel(includeSeries bool, delay int, seedURL url.URL, pages int,
 
 	m.Logs = logbuffer.NewLogBuffer()
 	m.logger = log.New(m.Logs, "", log.Ltime)
+
+	m.startTime = time.Now()
 
 	return
 }
@@ -167,7 +172,8 @@ func (m RuntimeModel) View() string {
 	stats := []string{
 		currentAction,
 		m.client.GetUser(),
-		fmt.Sprintf("ETA: %s", eta.Local().Format("15:04:05")),
+		fmt.Sprintf("ETA: %s (%s)", eta.Local().Format("15:04:05"), time.Until(eta).Round(time.Second)),
+		fmt.Sprintf("Elapsed: %s", time.Since(m.startTime).Round(time.Second)),
 		fmt.Sprintf("Works discovered: %d", m.workSet.Cardinality()),
 		series,
 		fmt.Sprintf("To crawl: %d", m.queue.Len()),
