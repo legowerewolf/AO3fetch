@@ -7,7 +7,7 @@ toolchain go1.24.1
 require (
 	github.com/andybalholm/cascadia v1.3.3
 	github.com/charmbracelet/bubbles v0.21.0
-	github.com/charmbracelet/bubbletea v1.3.7
+	github.com/charmbracelet/bubbletea v1.3.9
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/deckarep/golang-set/v2 v2.8.0
 	github.com/gammazero/deque v1.1.0
