@@ -55,8 +55,7 @@ jobs:
     name: Publish to WinGet
     needs: github
     runs-on: windows-latest
-    if:
-      github.event_name == 'release' && github.event.release.prerelease == false
+    if: github.event_name == 'release' && github.event.release.prerelease == false
     steps:
       - name: Publish to WinGet
         env:
@@ -77,8 +76,7 @@ jobs:
   homebrew:
     name: Publish to Homebrew Tap
     runs-on: ubuntu-latest
-    if:
-      github.event_name == 'release' && github.event.release.prerelease == false
+    if: github.event_name == 'release' && github.event.release.prerelease == false
     steps:
       - name: Set up Homebrew
         uses: Homebrew/actions/setup-homebrew@master
@@ -87,6 +85,9 @@ jobs:
 
       - name: Set up git
         uses: Homebrew/actions/git-user-config@master
+
+      - name: Install dependencies
+        run: brew install go
 
       - name: Tap legowerewolf/tap
         run: brew tap legowerewolf/tap
@@ -97,3 +98,4 @@ jobs:
           token: ${{secrets.WINGET_CREATE_GITHUB_TOKEN}}
           formulae: >
             legowerewolf/tap/ao3fetch
+          fork: false
