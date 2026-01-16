@@ -18,7 +18,7 @@ our bookmarks and cried.
 - [FanFicFare](https://github.com/JimmXinu/FanFicFare) is a plugin for Calibre
   that can download a work and populate its metadata when given a work URL.
   (This includes tags, which Calibre can't read out of a manually-downloaded
-  work.) It can also check for updates for works that its imported.
+  work.) It can also check for updates for works that it's imported.
 
 - **This tool** takes the URL of an index page on AO3 and retrieves all the work
   URLs from it so that you can copy-paste them _en masse_ into FanFicFare.
