@@ -1,6 +1,6 @@
 module github.com/legowerewolf/AO3fetch
 
-go 1.24.2
+go 1.25.0
 
 require (
 	github.com/andybalholm/cascadia v1.3.3
@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/deckarep/golang-set/v2 v2.8.0
 	github.com/gammazero/deque v1.2.1
-	golang.org/x/net v0.50.0
+	golang.org/x/net v0.51.0
 )
 
 require (
