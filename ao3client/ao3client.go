@@ -1,7 +1,7 @@
 package ao3client
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -10,7 +10,9 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/andybalholm/cascadia"
 	buildinfo "github.com/legowerewolf/AO3fetch/buildinfo"
+	"golang.org/x/net/html"
 )
 
 type Ao3Client struct {
@@ -83,7 +85,41 @@ func (c *Ao3Client) PostForm(url string, data url.Values) (*http.Response, error
 }
 
 func (c *Ao3Client) Authenticate(username, password string) error {
-	_, err := c.PostForm(c.baseUrl.JoinPath("/users/login").String(), c.generateLoginForm(username, password))
+	// phase 1: get login form
+	getFormResp, apiErr := c.Get(c.baseUrl.JoinPath("/users/login").String())
+	if apiErr != nil {
+		log.Fatal("Form request failed: ", apiErr)
+	}
+
+	dom, err := html.Parse(getFormResp.Body)
+	if err != nil {
+		log.Fatal("Form parse failed: ", err)
+	}
+
+	formInputs := cascadia.QueryAll(dom, cascadia.MustCompile("#loginform input"))
+
+	formValues := url.Values{}
+
+	for _, input := range formInputs {
+		n, ne := getAttr(input, "name")
+		if ne != nil {
+			log.Fatal("Form input parse name failed: ", ne)
+		}
+
+		v, ve := getAttr(input, "value")
+		if ve != nil {
+			continue
+		}
+
+		formValues.Set(n, v)
+	}
+
+	// phase 2: fill data
+	formValues.Set("[user]login", username)
+	formValues.Set("[user]password", password)
+
+	// phase 3: submit
+	submitFormResp, err := c.PostForm(c.baseUrl.JoinPath("/users/login").String(), formValues)
 	if err != nil {
 		return err
 	}
@@ -95,41 +131,11 @@ func (c *Ao3Client) Authenticate(username, password string) error {
 		}
 	}
 
+	body, err := io.ReadAll(submitFormResp.Body)
+	defer submitFormResp.Body.Close()
+
+	fmt.Println(string(body))
 	return fmt.Errorf("login failed")
-}
-
-func (c *Ao3Client) getAo3Token() string {
-	resp, apiErr := c.Get(c.baseUrl.JoinPath("/token_dispenser.json").String())
-	if apiErr != nil {
-		log.Fatal("Token request failed: ", apiErr)
-	}
-	if resp.Body != nil {
-		defer resp.Body.Close()
-	}
-
-	text, readErr := io.ReadAll(resp.Body)
-	if readErr != nil {
-		log.Fatal("Token read failed: ", readErr)
-	}
-
-	var r map[string]interface{}
-	unmarshalErr := json.Unmarshal(text, &r)
-	if unmarshalErr != nil {
-		log.Fatalf("Token parse failed: %s (value: %s)", unmarshalErr, string(text))
-	}
-
-	return r["token"].(string)
-}
-
-func (c *Ao3Client) generateLoginForm(username, password string) url.Values {
-	val := url.Values{}
-	val.Set("utf8", "✓")
-	val.Set("authenticity_token", c.getAo3Token())
-	val.Set("[user]login", username)
-	val.Set("[user]password", password)
-	val.Set("commit", "Log In")
-
-	return val
 }
 
 func (c *Ao3Client) ToFullURL(_url string) string {
@@ -144,4 +150,13 @@ func (c *Ao3Client) GetUser() string {
 	}
 
 	return c.authenticatedUser
+}
+
+func getAttr(t *html.Node, attr string) (string, error) {
+	for _, a := range t.Attr {
+		if a.Key == attr {
+			return a.Val, nil
+		}
+	}
+	return "", errors.New("no attribute found")
 }
