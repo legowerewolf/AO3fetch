@@ -20,6 +20,10 @@ type Ao3Client struct {
 	authenticatedUser string
 }
 
+const loginRoute string = "/users/login"
+const loginField string = "user[login]"
+const passwordField string = "user[password]"
+
 func NewAo3Client(baseUrl string) (*Ao3Client, error) {
 	uBaseUrl, err := url.Parse(baseUrl)
 	if err != nil {
@@ -84,7 +88,7 @@ func (c *Ao3Client) PostForm(url string, data url.Values) (*http.Response, error
 
 func (c *Ao3Client) Authenticate(username, password string) error {
 	// phase 1: get login form
-	getFormResp, apiErr := c.Get(c.baseUrl.JoinPath("/users/login").String())
+	getFormResp, apiErr := c.Get(c.baseUrl.JoinPath(loginRoute).String())
 	if apiErr != nil {
 		return fmt.Errorf("Form request failed: error %v", apiErr)
 	}
@@ -112,19 +116,19 @@ func (c *Ao3Client) Authenticate(username, password string) error {
 		formValues.Set(n, v)
 	}
 
-	if !formValues.Has("user[login]") {
+	if !formValues.Has(loginField) {
 		return errors.New("Form parse failed: missing username input")
 	}
-	if !formValues.Has("user[password]") {
+	if !formValues.Has(passwordField) {
 		return errors.New("Form parse failed: missing password input")
 	}
 
 	// phase 2: fill data
-	formValues.Set("user[login]", username)
-	formValues.Set("user[password]", password)
+	formValues.Set(loginField, username)
+	formValues.Set(passwordField, password)
 
 	// phase 3: submit
-	_, err = c.PostForm(c.baseUrl.JoinPath("/users/login").String(), formValues)
+	_, err = c.PostForm(c.baseUrl.JoinPath(loginRoute).String(), formValues)
 	if err != nil {
 		return err
 	}
