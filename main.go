@@ -115,7 +115,9 @@ func main() {
 
 			err := client.Authenticate(username, pass)
 			if err != nil {
-				log.Fatal("Login failed. Check your credentials and try again.")
+				log.Println("Login failed. Check your credentials and try again.")
+				log.Println(err)
+				os.Exit(1)
 			}
 
 		}
