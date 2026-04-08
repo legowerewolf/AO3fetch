@@ -3,8 +3,6 @@ package ao3client
 import (
 	"errors"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -88,12 +86,15 @@ func (c *Ao3Client) Authenticate(username, password string) error {
 	// phase 1: get login form
 	getFormResp, apiErr := c.Get(c.baseUrl.JoinPath("/users/login").String())
 	if apiErr != nil {
-		log.Fatal("Form request failed: ", apiErr)
+		return fmt.Errorf("Form request failed: error %v", apiErr)
+	}
+	if getFormResp.StatusCode != 200 {
+		return fmt.Errorf("Form request failed: invalid status %d / %s", getFormResp.StatusCode, getFormResp.Status)
 	}
 
 	dom, err := html.Parse(getFormResp.Body)
 	if err != nil {
-		log.Fatal("Form parse failed: ", err)
+		return fmt.Errorf("Form parse failed: %w", err)
 	}
 
 	formInputs := cascadia.QueryAll(dom, cascadia.MustCompile("#loginform input"))
@@ -103,23 +104,27 @@ func (c *Ao3Client) Authenticate(username, password string) error {
 	for _, input := range formInputs {
 		n, ne := getAttr(input, "name")
 		if ne != nil {
-			log.Fatal("Form input parse name failed: ", ne)
+			return fmt.Errorf("Form input parse name failed: %v", ne)
 		}
 
-		v, ve := getAttr(input, "value")
-		if ve != nil {
-			continue
-		}
+		v, _ := getAttr(input, "value")
 
 		formValues.Set(n, v)
 	}
 
+	if !formValues.Has("user[login]") {
+		return errors.New("Form parse failed: missing username input")
+	}
+	if !formValues.Has("user[password]") {
+		return errors.New("Form parse failed: missing password input")
+	}
+
 	// phase 2: fill data
-	formValues.Set("[user]login", username)
-	formValues.Set("[user]password", password)
+	formValues.Set("user[login]", username)
+	formValues.Set("user[password]", password)
 
 	// phase 3: submit
-	submitFormResp, err := c.PostForm(c.baseUrl.JoinPath("/users/login").String(), formValues)
+	_, err = c.PostForm(c.baseUrl.JoinPath("/users/login").String(), formValues)
 	if err != nil {
 		return err
 	}
@@ -131,11 +136,7 @@ func (c *Ao3Client) Authenticate(username, password string) error {
 		}
 	}
 
-	body, err := io.ReadAll(submitFormResp.Body)
-	defer submitFormResp.Body.Close()
-
-	fmt.Println(string(body))
-	return fmt.Errorf("login failed")
+	return errors.New("login failed")
 }
 
 func (c *Ao3Client) ToFullURL(_url string) string {
@@ -158,5 +159,5 @@ func getAttr(t *html.Node, attr string) (string, error) {
 			return a.Val, nil
 		}
 	}
-	return "", errors.New("no attribute found")
+	return "", errors.New("no attribute found for key " + attr)
 }
