@@ -1,6 +1,6 @@
 module github.com/legowerewolf/AO3fetch
 
-go 1.25.0
+go 1.26.3
 
 require (
 	github.com/andybalholm/cascadia v1.3.3
