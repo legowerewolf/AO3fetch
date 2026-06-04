@@ -1,0 +1,29 @@
+name: Checks (unstable)
+
+on:
+  schedule:
+    - cron: 0 0 * * FRI
+  push:
+    paths:
+      - "**.go"
+      - go.mod
+      - go.sum
+      - .github/workflows/unstable-check.yml
+
+permissions: read-all
+
+jobs:
+  vulncheck:
+    name: Govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up repo
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Run Govulncheck
+        run: govulncheck ./...
