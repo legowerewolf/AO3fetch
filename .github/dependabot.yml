@@ -7,12 +7,21 @@ version: 2
 updates:
   - package-ecosystem: gomod
     directory: /
+    groups:
+      minor:
+        update-types:
+          - minor
+          - patch
+    cooldown:
+      default-days: 10
     schedule:
       interval: "weekly"
       day: "friday"
 
   - package-ecosystem: github-actions
     directory: /
+    cooldown:
+      default-days: 10
     schedule:
       interval: "weekly"
       day: "friday"
