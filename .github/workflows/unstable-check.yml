@@ -25,5 +25,8 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Install Govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
       - name: Run Govulncheck
         run: govulncheck ./...
