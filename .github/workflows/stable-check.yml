@@ -1,4 +1,4 @@
-name: Check
+name: Checks
 
 on:
   push:
@@ -6,13 +6,13 @@ on:
       - "**.go"
       - go.mod
       - go.sum
-      - .github/workflows/check.yml
+      - .github/workflows/stable-check.yml
 
 permissions: read-all
 
 jobs:
-  check:
-    name: Check
+  build-and-test:
+    name: Build and Test
     runs-on: ubuntu-latest
     steps:
       - name: Set up repo
