@@ -81,12 +81,12 @@ jobs:
       github.event_name == 'release' && github.event.release.prerelease == false
     steps:
       - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@master
+        uses: Homebrew/actions/setup-homebrew@main
         with:
           token: ${{ github.token }}
 
       - name: Set up git
-        uses: Homebrew/actions/git-user-config@master
+        uses: Homebrew/actions/git-user-config@main
 
       - name: Install dependencies
         run: brew install go
@@ -95,7 +95,7 @@ jobs:
         run: brew tap legowerewolf/tap
 
       - name: Bump package
-        uses: Homebrew/actions/bump-packages@master
+        uses: Homebrew/actions/bump-packages@main
         with:
           token: ${{secrets.HOMEBREW_GITHUB_TOKEN}}
           formulae: >
