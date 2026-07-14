@@ -144,7 +144,7 @@ func (c *Ao3Client) Authenticate(username, password string) error {
 		}
 	}
 
-	return errors.New("login failed")
+	return errors.New("Login failed: invalid credentials")
 }
 
 func (c *Ao3Client) ToFullURL(_url string) string {
