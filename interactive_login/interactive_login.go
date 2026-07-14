@@ -196,7 +196,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case loginFailedMsg:
 		m.focused = 0
-		m.status = "Login failed. Check your credentials and try again."
+		m.status = msg.err.Error()
 		return m, m.updateFocus()
 
 	case spinner.TickMsg:
@@ -232,7 +232,7 @@ func (m *model) updateFocus() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-type loginFailedMsg struct{}
+type loginFailedMsg struct{ err error }
 type loginSuccessMsg struct{}
 
 func (m *model) attemptLogin() tea.Cmd {
@@ -246,7 +246,7 @@ func (m *model) attemptLogin() tea.Cmd {
 			return loginSuccessMsg{}
 		}
 
-		return loginFailedMsg{}
+		return loginFailedMsg{err}
 	}
 }
 

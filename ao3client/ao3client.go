@@ -93,6 +93,10 @@ func (c *Ao3Client) Authenticate(username, password string) error {
 		return fmt.Errorf("Form request failed: error %v", apiErr)
 	}
 	if getFormResp.StatusCode != 200 {
+		if getFormResp.Header.Get("cf-mitigated") == "challenge" {
+			return errors.New("Encountered Cloudflare challenge; unable to proceed")
+		}
+
 		return fmt.Errorf("Form request failed: invalid status %d / %s", getFormResp.StatusCode, getFormResp.Status)
 	}
 
@@ -140,7 +144,7 @@ func (c *Ao3Client) Authenticate(username, password string) error {
 		}
 	}
 
-	return errors.New("login failed")
+	return errors.New("Login failed: invalid credentials")
 }
 
 func (c *Ao3Client) ToFullURL(_url string) string {
