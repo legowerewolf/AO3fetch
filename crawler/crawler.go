@@ -371,6 +371,12 @@ func crawl(client *ao3client.Ao3Client, crawlUrl string, includeSeries bool) (cr
 		return
 	}
 
+	// handle Cloudflare specifically
+	if resp.Header.Get("cf-mitigated") == "challenge" {
+		cr.ErrMsg = "Encountered Cloudflare challenge."
+		return
+	}
+
 	// handle non-2xx status codes
 	if codeClass := resp.StatusCode / 100; codeClass != 2 {
 		switch codeClass {
