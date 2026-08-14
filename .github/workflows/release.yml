@@ -84,6 +84,9 @@ jobs:
 
       - name: Set up git
         uses: Homebrew/actions/git-user-config@main
+        with:
+          username: legowerewolf
+          token: ${{secrets.HOMEBREW_GITHUB_TOKEN}}
 
       - name: Install dependencies
         run: brew install go
