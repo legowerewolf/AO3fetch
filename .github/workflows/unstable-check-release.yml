@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Query latest release
         id: release_metadata
-        run: >
+        run: |
           latest_release_version=gh api $GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/latest | jq ".tag_name"
           echo "latest_release_version=$latest_release_version" >> GITHUB_OUTPUT
 
