@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/deckarep/golang-set/v2 v2.9.0
-	github.com/gammazero/deque v1.2.1
+	github.com/gammazero/deque v1.2.2
 	golang.org/x/net v0.61.0
 )
 
