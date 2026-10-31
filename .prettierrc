@@ -1,0 +1,11 @@
+{
+  "overrides": [
+    {
+      "files": ".github/workflows/*.yml",
+      "options": {
+        "proseWrap": "preserve",
+        "printWidth": 80
+      }
+    }
+  ]
+}

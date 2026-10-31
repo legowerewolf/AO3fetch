@@ -8,8 +8,8 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/deckarep/golang-set/v2 v2.9.0
-	github.com/gammazero/deque v1.2.2
-	golang.org/x/net v0.61.0
+	github.com/gammazero/deque v1.2.3
+	golang.org/x/net v0.62.0
 )
 
 require (
@@ -31,7 +31,7 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/xo/terminfo v1.2.0 // indirect
+	github.com/xo/terminfo v1.3.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.10 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
