@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/deckarep/golang-set/v2 v2.9.0
 	github.com/gammazero/deque v1.2.3
-	golang.org/x/net v0.62.0
+	golang.org/x/net v0.63.0
 )
 
 require (
